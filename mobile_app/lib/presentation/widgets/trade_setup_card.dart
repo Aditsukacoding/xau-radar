@@ -50,21 +50,28 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(actionIcon, color: actionColor, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    s.actionLabel,
-                    style: TextStyle(
-                      color: actionColor,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(actionIcon, color: actionColor, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        s.actionLabel,
+                        style: TextStyle(
+                          color: actionColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                 decoration: BoxDecoration(
@@ -207,21 +214,28 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(CupertinoIcons.chart_bar_alt_fill, color: AppColors.primary, size: 14),
-                          SizedBox(width: 6),
-                          Text(
-                            'RASIONAL TEKNIKAL & KATALIS NEWS',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
+                      const Expanded(
+                        child: Row(
+                          children: [
+                            Icon(CupertinoIcons.chart_bar_alt_fill, color: AppColors.primary, size: 14),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'RASIONAL TEKNIKAL & KATALIS NEWS',
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Icon(
                         _isRationaleExpanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
                         color: AppColors.textTertiary,
@@ -370,14 +384,18 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'monospace',
-              letterSpacing: -0.2,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                fontFamily: 'monospace',
+                letterSpacing: -0.2,
+              ),
             ),
           ),
           const SizedBox(height: 2),

@@ -136,6 +136,10 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final topPadding = mediaQuery.padding.top + kToolbarHeight + 12;
+    final bottomPadding = mediaQuery.padding.bottom + 64 + 24;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: _isLoading
@@ -157,10 +161,10 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                   onRefresh: _loadTechnicalData,
                   color: AppColors.primary,
                   backgroundColor: const Color(0xFF1C1C1E),
-                  edgeOffset: 80,
+                  edgeOffset: mediaQuery.padding.top + kToolbarHeight,
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                    padding: const EdgeInsets.fromLTRB(16, 75, 16, 100),
+                    padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPadding),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -170,15 +174,20 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'GRAFIK TEKNIKAL REAL-TIME',
-                                style: TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.8,
+                              const Expanded(
+                                child: Text(
+                                  'GRAFIK TEKNIKAL REAL-TIME',
+                                  style: TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.8,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                                 decoration: BoxDecoration(
@@ -187,11 +196,12 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                                   border: Border.all(color: const Color(0x5010B981), width: 0.8),
                                 ),
                                 child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(Icons.circle, size: 7, color: Color(0xFF10B981)),
                                     SizedBox(width: 5),
                                     Text(
-                                      'FOREX.COM • LIVE REAL-TIME',
+                                      'FOREX.COM • LIVE',
                                       style: TextStyle(
                                         color: Color(0xFF10B981),
                                         fontSize: 10,
@@ -362,13 +372,17 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                                         style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w700),
                                       ),
                                       const SizedBox(height: 8),
-                                      Text(
-                                        '${_indicators!.ema9?.toStringAsFixed(1) ?? '-'} / ${_indicators!.ema21?.toStringAsFixed(1) ?? '-'}',
-                                        style: const TextStyle(
-                                          color: AppColors.primary,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w800,
-                                          fontFamily: 'monospace',
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          '${_indicators!.ema9?.toStringAsFixed(1) ?? '-'} / ${_indicators!.ema21?.toStringAsFixed(1) ?? '-'}',
+                                          style: const TextStyle(
+                                            color: AppColors.primary,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                            fontFamily: 'monospace',
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 6),

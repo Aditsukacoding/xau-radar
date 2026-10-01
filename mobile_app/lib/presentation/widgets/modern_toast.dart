@@ -75,7 +75,7 @@ class ModernToast {
         margin: EdgeInsets.only(
           left: horizontalMargin,
           right: horizontalMargin,
-          bottom: 24.0,
+          bottom: max(24.0, MediaQuery.of(context).padding.bottom + 82.0),
         ),
         duration: duration,
         padding: EdgeInsets.zero,

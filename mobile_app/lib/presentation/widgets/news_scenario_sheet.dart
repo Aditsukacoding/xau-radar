@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
@@ -173,7 +174,7 @@ class NewsScenarioSheet extends StatelessWidget {
           Expanded(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 30),
+              padding: EdgeInsets.fromLTRB(16, 14, 16, math.max(30.0, MediaQuery.paddingOf(context).bottom + 20)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -455,14 +456,17 @@ class NewsScenarioSheet extends StatelessWidget {
             style: const TextStyle(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 3),
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'monospace',
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                fontFamily: 'monospace',
+              ),
             ),
           ),
         ],

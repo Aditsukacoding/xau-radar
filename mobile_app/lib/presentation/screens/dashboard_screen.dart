@@ -245,15 +245,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final data = _summary!;
     final isPriceUp = data.priceChange24h >= 0;
+    final mediaQuery = MediaQuery.of(context);
+    final topPadding = mediaQuery.padding.top + kToolbarHeight + 12;
+    final bottomPadding = mediaQuery.padding.bottom + 64 + 24;
 
     return RefreshIndicator(
       onRefresh: _loadDashboardData,
       color: AppColors.primary,
       backgroundColor: const Color(0xFF1C1C1E),
-      edgeOffset: 80,
+      edgeOffset: mediaQuery.padding.top + kToolbarHeight,
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-        padding: const EdgeInsets.fromLTRB(16, 80, 16, 100), // Top & bottom inset for floating bars
+        padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -263,15 +266,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'RINGKASAN PASAR',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
+                  const Expanded(
+                    child: Text(
+                      'RINGKASAN PASAR',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                     decoration: BoxDecoration(
@@ -311,37 +319,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.neutral.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.neutral.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(CupertinoIcons.circle_grid_hex_fill, color: AppColors.neutral, size: 22),
                             ),
-                            child: const Icon(CupertinoIcons.circle_grid_hex_fill, color: AppColors.neutral, size: 22),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                data.symbol,
-                                style: const TextStyle(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.6,
-                                ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    data.symbol,
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.6,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    data.instrumentName,
+                                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              Text(
-                                data.instrumentName,
-                                style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5),
-                              ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       // Live Real-Time Indicator & Manual Sync Button
                       Row(
                         children: [
@@ -392,48 +409,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _priceFlashColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '\$${data.currentPrice.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 34,
-                                fontWeight: FontWeight.w800,
-                                fontFamily: 'monospace',
-                                letterSpacing: -1.0,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _priceFlashColor,
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Icon(
-                                isPriceUp ? CupertinoIcons.arrow_up_right : CupertinoIcons.arrow_down_right,
-                                color: isPriceUp ? AppColors.bullish : AppColors.bearish,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${isPriceUp ? '+' : ''}\$${data.priceChange24h.toStringAsFixed(2)} (${isPriceUp ? '+' : ''}${data.priceChangePct24h.toStringAsFixed(2)}%)',
-                                style: TextStyle(
-                                  color: isPriceUp ? AppColors.bullish : AppColors.bearish,
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '\$${data.currentPrice.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.w800,
+                                    fontFamily: 'monospace',
+                                    letterSpacing: -1.0,
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(
+                                  isPriceUp ? CupertinoIcons.arrow_up_right : CupertinoIcons.arrow_down_right,
+                                  color: isPriceUp ? AppColors.bullish : AppColors.bearish,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    '${isPriceUp ? '+' : ''}\$${data.priceChange24h.toStringAsFixed(2)} (${isPriceUp ? '+' : ''}${data.priceChangePct24h.toStringAsFixed(2)}%)',
+                                    style: TextStyle(
+                                      color: isPriceUp ? AppColors.bullish : AppColors.bearish,
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 10),
                       // 24h High/Low Stats (Apple Inset Style)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -851,15 +879,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+          const SizedBox(width: 8),
           GestureDetector(
             onTap: () => widget.onNavigateTab?.call(tabIndex),
             child: const Text(

@@ -105,6 +105,10 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final topPadding = mediaQuery.padding.top + kToolbarHeight + 12;
+    final bottomPadding = mediaQuery.padding.bottom + 64 + 24;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: _isLoading
@@ -126,10 +130,10 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                   onRefresh: _loadReport,
                   color: AppColors.primary,
                   backgroundColor: const Color(0xFF1C1C1E),
-                  edgeOffset: 80,
+                  edgeOffset: mediaQuery.padding.top + kToolbarHeight,
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                    padding: const EdgeInsets.fromLTRB(16, 75, 16, 100),
+                    padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPadding),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -137,45 +141,48 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                const Text(
-                                  'LAPORAN SINTESIS AI',
-                                  style: TextStyle(
-                                    color: AppColors.textMuted,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.8,
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const Text(
+                                    'LAPORAN SINTESIS AI',
+                                    style: TextStyle(
+                                      color: AppColors.textMuted,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.8,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.bullish,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppColors.bullish.withValues(alpha: 0.6),
-                                        blurRadius: 4,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.bullish,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.bullish.withValues(alpha: 0.6),
+                                          blurRadius: 4,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 4),
-                                const Text(
-                                  'LIVE',
-                                  style: TextStyle(
-                                    color: AppColors.bullish,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.4,
+                                  const SizedBox(width: 4),
+                                  const Text(
+                                    'LIVE',
+                                    style: TextStyle(
+                                      color: AppColors.bullish,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.4,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             GestureDetector(
                               onTap: _isRefreshing ? null : _triggerFreshSynthesis,
                               child: Container(
@@ -215,16 +222,19 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
-                                    children: [
-                                      BiasBadge(bias: _report!.bias, isLarge: true),
-                                      const SizedBox(width: 10),
-                                      Text(
-                                        _report!.symbol,
-                                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w800),
-                                      ),
-                                    ],
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        BiasBadge(bias: _report!.bias, isLarge: true),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          _report!.symbol,
+                                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w800),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(
                                     _report!.createdAt.formatWibShort(),
                                     style: const TextStyle(color: AppColors.textMuted, fontSize: 11),

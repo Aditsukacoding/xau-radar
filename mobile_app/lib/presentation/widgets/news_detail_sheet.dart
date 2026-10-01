@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -613,7 +614,7 @@ class NewsDetailSheet extends StatelessWidget {
 
               // Sticky Modern Bottom Action Bar
               Container(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                padding: EdgeInsets.fromLTRB(20, 12, 20, math.max(16.0, MediaQuery.paddingOf(context).bottom + 8)),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0C1018).withValues(alpha: 0.94),
                   border: const Border(top: BorderSide(color: AppColors.borderSubtle)),

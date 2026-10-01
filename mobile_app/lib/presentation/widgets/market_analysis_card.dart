@@ -64,21 +64,28 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(biasIcon, color: biasColor, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'BIAS PASAR: ${widget.bias.toUpperCase()}',
-                    style: TextStyle(
-                      color: biasColor,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(biasIcon, color: biasColor, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'BIAS PASAR: ${widget.bias.toUpperCase()}',
+                        style: TextStyle(
+                          color: biasColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -139,15 +146,19 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        widget.supportLevels.isNotEmpty
-                            ? widget.supportLevels.take(2).map((s) => '\$${s.toStringAsFixed(1)}').join(' • ')
-                            : 'Mengikuti Chart',
-                        style: const TextStyle(
-                          color: AppColors.bullish,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          fontFamily: 'monospace',
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          widget.supportLevels.isNotEmpty
+                              ? widget.supportLevels.take(2).map((s) => '\$${s.toStringAsFixed(1)}').join(' • ')
+                              : 'Mengikuti Chart',
+                          style: const TextStyle(
+                            color: AppColors.bullish,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'monospace',
+                          ),
                         ),
                       ),
                     ],
@@ -170,15 +181,19 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        widget.resistanceLevels.isNotEmpty
-                            ? widget.resistanceLevels.take(2).map((r) => '\$${r.toStringAsFixed(1)}').join(' • ')
-                            : 'Mengikuti Chart',
-                        style: const TextStyle(
-                          color: AppColors.bearish,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          fontFamily: 'monospace',
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          widget.resistanceLevels.isNotEmpty
+                              ? widget.resistanceLevels.take(2).map((r) => '\$${r.toStringAsFixed(1)}').join(' • ')
+                              : 'Mengikuti Chart',
+                          style: const TextStyle(
+                            color: AppColors.bearish,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'monospace',
+                          ),
                         ),
                       ),
                     ],
@@ -210,21 +225,28 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(CupertinoIcons.bolt_fill, color: AppColors.primary, size: 13),
-                          SizedBox(width: 6),
-                          Text(
-                            'PANDUAN AKSI SCALPING & INTRADAY',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
+                      const Expanded(
+                        child: Row(
+                          children: [
+                            Icon(CupertinoIcons.bolt_fill, color: AppColors.primary, size: 13),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'PANDUAN AKSI SCALPING & INTRADAY',
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Icon(
                         _isExpanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
                         color: AppColors.textTertiary,

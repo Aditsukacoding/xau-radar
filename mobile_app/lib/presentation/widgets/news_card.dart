@@ -111,20 +111,27 @@ class NewsCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(CupertinoIcons.news, color: AppColors.textMuted, size: 13),
-                    const SizedBox(width: 5),
-                    Text(
-                      article.source,
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(CupertinoIcons.news, color: AppColors.textMuted, size: 13),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          article.source,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Row(
                   children: [
                     Text(

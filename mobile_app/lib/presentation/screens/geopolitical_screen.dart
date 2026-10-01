@@ -81,11 +81,15 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final topInset = mediaQuery.padding.top + kToolbarHeight + 8;
+    final bottomInset = mediaQuery.padding.bottom + 64 + 20;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          const SizedBox(height: 64), // Inset for floating glass appbar
+          SizedBox(height: topInset), // Inset for floating glass appbar
 
           // Header Status & Sync Bar
           Padding(
@@ -93,35 +97,36 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'BERITA & GEOPOLITIK',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'BERITA & GEOPOLITIK',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 7),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.35), width: 0.8),
+                          const SizedBox(width: 7),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.35), width: 0.8),
+                            ),
+                            child: const Text(
+                              'WIB (UTC+7)',
+                              style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800),
+                            ),
                           ),
-                          child: const Text(
-                            'WIB (UTC+7)',
-                            style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
                     const SizedBox(height: 2),
                     Row(
                       children: [
@@ -154,7 +159,9 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
                     ),
                   ],
                 ),
-                CupertinoButton(
+              ),
+              const SizedBox(width: 8),
+              CupertinoButton(
                   padding: EdgeInsets.zero,
                   onPressed: _isSyncing ? null : () => _loadNews(silent: false, triggerSync: true),
                   child: Container(
@@ -239,7 +246,7 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
                             backgroundColor: const Color(0xFF1C1C1E),
                             child: ListView.builder(
                               physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                              padding: const EdgeInsets.only(top: 8, bottom: 90),
+                              padding: EdgeInsets.only(top: 8, bottom: bottomInset),
                               itemCount: _articles.length,
                               itemBuilder: (context, index) {
                                 return NewsCard(article: _articles[index]);
