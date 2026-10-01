@@ -253,80 +253,162 @@ class _MainShellState extends State<MainShell> {
         index: _currentIndex,
         children: screens,
       ),
-      // Floating iOS Frosted Glass Tab Bar
-      bottomNavigationBar: SafeArea(
+      // Authentic iPhone-style Tab Bar
+      bottomNavigationBar: _IosTabBar(
+        currentIndex: _currentIndex,
+        onTap: _onTabSelected,
+      ),
+    );
+  }
+}
+
+// ─── Native iPhone-style Tab Bar ─────────────────────────────────────────────
+class _IosTabBar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  const _IosTabBar({required this.currentIndex, required this.onTap});
+
+  static const _tabs = [
+    _TabItem(outlineIcon: CupertinoIcons.compass,              filledIcon: CupertinoIcons.compass_fill,          label: 'Pasar'),
+    _TabItem(outlineIcon: CupertinoIcons.calendar,             filledIcon: CupertinoIcons.calendar_today,        label: 'Kalender'),
+    _TabItem(outlineIcon: CupertinoIcons.globe,                filledIcon: CupertinoIcons.globe,                 label: 'Berita'),
+    _TabItem(outlineIcon: CupertinoIcons.chart_bar_alt_fill,   filledIcon: CupertinoIcons.chart_bar_alt_fill,    label: 'Teknikal'),
+    _TabItem(outlineIcon: CupertinoIcons.sparkles,             filledIcon: CupertinoIcons.sparkles,              label: 'Sintesis'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).padding.bottom;
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
         child: Container(
-          margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-          height: 64,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.6),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(32),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0x75161B26),
-                  borderRadius: BorderRadius.circular(32),
-                  border: Border.all(color: AppColors.border, width: 0.8),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildNavItem(0, CupertinoIcons.compass, CupertinoIcons.compass_fill, 'Pasar'),
-                    _buildNavItem(1, CupertinoIcons.calendar, CupertinoIcons.calendar_today, 'Kalender'),
-                    _buildNavItem(2, CupertinoIcons.globe, CupertinoIcons.globe, 'Berita'),
-                    _buildNavItem(3, CupertinoIcons.chart_bar_alt_fill, CupertinoIcons.chart_bar_alt_fill, 'Teknikal'),
-                    _buildNavItem(4, CupertinoIcons.sparkles, CupertinoIcons.sparkles, 'Sintesis'),
-                  ],
-                ),
+            // Authentic iOS frosted dark vibrancy (UITabBar dark)
+            color: const Color(0xCC000000),
+            border: Border(
+              top: BorderSide(
+                color: Colors.white.withValues(alpha: 0.13),
+                width: 0.4,
               ),
             ),
+          ),
+          padding: EdgeInsets.only(bottom: bottom),
+          height: 49.0 + bottom,
+          child: Row(
+            children: List.generate(_tabs.length, (i) {
+              final tab = _tabs[i];
+              final selected = i == currentIndex;
+              return Expanded(
+                child: _IosTabItemWidget(
+                  tab: tab,
+                  selected: selected,
+                  onTap: () => onTap(i),
+                ),
+              );
+            }),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildNavItem(int index, IconData outlineIcon, IconData filledIcon, String label) {
-    final isSelected = _currentIndex == index;
+class _TabItem {
+  final IconData outlineIcon;
+  final IconData filledIcon;
+  final String label;
+  const _TabItem({required this.outlineIcon, required this.filledIcon, required this.label});
+}
+
+class _IosTabItemWidget extends StatefulWidget {
+  final _TabItem tab;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _IosTabItemWidget({required this.tab, required this.selected, required this.onTap});
+
+  @override
+  State<_IosTabItemWidget> createState() => _IosTabItemWidgetState();
+}
+
+class _IosTabItemWidgetState extends State<_IosTabItemWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+      lowerBound: 0.0,
+      upperBound: 1.0,
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.84)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeIn));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() async {
+    await _ctrl.forward();
+    widget.onTap();
+    await _ctrl.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected;
+    // Active: gold amber matching app brand; inactive: Apple system gray
+    final Color activeColor = const Color(0xFFFFD60A);    // Apple amber/gold
+    final Color inactiveColor = const Color(0xFF8E8E93);  // Apple System Gray 1
+
     return GestureDetector(
-      onTap: () => _onTabSelected(index),
+      onTap: _handleTap,
       behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isSelected ? filledIcon : outlineIcon,
-              color: isSelected ? AppColors.primary : AppColors.textMuted,
-              size: 21,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? AppColors.primary : AppColors.textMuted,
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.2,
+      child: ScaleTransition(
+        scale: _scale,
+        child: SizedBox(
+          height: 49.0,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                transitionBuilder: (child, anim) => ScaleTransition(
+                  scale: Tween<double>(begin: 0.75, end: 1.0).animate(
+                    CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+                  ),
+                  child: FadeTransition(opacity: anim, child: child),
+                ),
+                child: Icon(
+                  selected ? widget.tab.filledIcon : widget.tab.outlineIcon,
+                  key: ValueKey(selected),
+                  size: 25.0,
+                  color: selected ? activeColor : inactiveColor,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 180),
+                style: TextStyle(
+                  fontSize: 10.0,
+                  height: 1.0,
+                  letterSpacing: -0.2,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected ? activeColor : inactiveColor,
+                ),
+                child: Text(widget.tab.label),
+              ),
+            ],
+          ),
         ),
       ),
     );
