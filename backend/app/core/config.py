@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     ANTHROPIC_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
+    OPENROUTER_API_KEY: Optional[str] = None  # Free fallback: 200+ models via openrouter.ai
     FOREX_NEWS_API_KEY: Optional[str] = None
     TWELVE_DATA_API_KEY: Optional[str] = None
     FINNHUB_API_KEY: Optional[str] = None

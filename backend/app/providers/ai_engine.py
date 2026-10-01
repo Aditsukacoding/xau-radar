@@ -131,9 +131,25 @@ class AIAgentEngine:
                 logger.info("[AIAgentEngine] Gemini analysis successfully synthesized and sanitized!")
                 return sanitized
             except Exception as e:
-                logger.warning(f"Gemini API failed, falling back to heuristic: {e}")
+                logger.warning(f"Gemini API failed, trying OpenRouter fallback: {e}")
 
-        # 3. Built-in Quantitative Heuristic Synthesizer (Zero-cost, works offline)
+        # 3. Try OpenRouter API (FREE — 200+ models, same key as portfolio chatbot)
+        if settings.OPENROUTER_API_KEY:
+            try:
+                raw_openrouter = await AIAgentEngine._call_openrouter_api(payload_data)
+                sanitized = AIAgentEngine._sanitize_and_validate_trade_setup(
+                    raw_openrouter,
+                    curr_price=curr_price,
+                    technical_data=technical_data,
+                    economic_events=economic_events,
+                    news_articles=news_articles
+                )
+                logger.info("[AIAgentEngine] OpenRouter analysis successfully synthesized and sanitized!")
+                return sanitized
+            except Exception as e:
+                logger.warning(f"OpenRouter API failed, falling back to heuristic: {e}")
+
+        # 4. Built-in Quantitative Heuristic Synthesizer (Zero-cost, works offline)
         raw_heuristic = AIAgentEngine._heuristic_synthesis(symbol, price_snapshot, technical_data, economic_events, news_articles)
         return AIAgentEngine._sanitize_and_validate_trade_setup(
             raw_heuristic,
@@ -242,6 +258,83 @@ class AIAgentEngine:
                 continue
 
         raise RuntimeError(f"All Gemini models failed: {last_error}")
+
+    @staticmethod
+    async def _call_openrouter_api(data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calls OpenRouter.ai — a free-tier gateway to 200+ LLMs (Qwen, Gemma, Mistral, etc.).
+        Uses the same OPENROUTER_API_KEY as the portfolio chatbot (sk-or-v1-...).
+        Tries multiple free models in sequence as an internal fallback chain.
+        """
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+            "HTTP-Referer": "https://xauusd-radar.app",
+            "X-Title": "XAU/USD RADAR — Institutional Bias Engine",
+        }
+        # Free model priority order: strongest first, lightest last as safety net
+        # List verified on 2026-10-01 from openrouter.ai/api/v1/models
+        free_models = [
+            "nvidia/nemotron-3-ultra-550b-a55b:free",  # 550B param — strongest available
+            "qwen/qwen3.8-27b:free",                   # Qwen 3.8 27B — solid reasoning
+            "google/gemma-4-31b-it:free",              # Google Gemma 4 31B
+            "google/gemma-4-26b-a4b-it:free",          # Google Gemma 4 26B MoE
+            "nvidia/nemotron-3-super-120b-a12b:free",  # Nvidia Nemotron 120B
+            "nvidia/nemotron-3.5-lightning:free",       # Nvidia fast model
+        ]
+        last_error: Any = None
+        for model in free_models:
+            try:
+                body = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Analisis data pasar berikut dan berikan kesimpulan bias "
+                                f"dalam format JSON yang valid:\n{json.dumps(data, default=str)}"
+                            ),
+                        },
+                    ],
+                    "max_tokens": 2048,
+                    "temperature": 0.2,
+                    "response_format": {"type": "json_object"},
+                }
+                async with httpx.AsyncClient(timeout=45.0) as client:
+                    resp = await client.post(url, json=body, headers=headers)
+                    if resp.status_code == 200:
+                        res_json = resp.json()
+                        content_text = res_json.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                        if not content_text:
+                            logger.warning(f"[OpenRouter] {model} returned empty content.")
+                            continue
+                        # Extract JSON block robustly
+                        if content_text.startswith("```json"):
+                            content_text = content_text[7:]
+                        elif content_text.startswith("```"):
+                            content_text = content_text[3:]
+                        if content_text.endswith("```"):
+                            content_text = content_text[:-3]
+                        s_idx = content_text.find("{")
+                        e_idx = content_text.rfind("}")
+                        if s_idx != -1 and e_idx != -1 and e_idx > s_idx:
+                            content_text = content_text[s_idx:e_idx + 1]
+                        parsed = json.loads(content_text.strip())
+                        logger.info(f"[AIAgentEngine] OpenRouter/{model} analysis synthesized!")
+                        return parsed
+                    else:
+                        last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                        logger.warning(f"[OpenRouter] {model} returned {resp.status_code}")
+            except json.JSONDecodeError as e:
+                last_error = f"JSON parse error: {e}"
+                logger.warning(f"[OpenRouter] {model} JSON parse failed: {e}")
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"[OpenRouter] {model} call error: {e}")
+
+        raise RuntimeError(f"All OpenRouter models failed. Last error: {last_error}")
 
     @staticmethod
     def _heuristic_synthesis(
