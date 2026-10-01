@@ -754,69 +754,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                   NewsDetailSheet.show(context, article);
                 },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Builder(
+                  builder: (context) {
+                    final h = data.latestGeopoliticalHeadline!;
+                    final sentimentLabel = h['sentiment_label'] ?? 'NEUTRAL';
+                    final Color sentimentColor = sentimentLabel == 'POSITIVE'
+                        ? AppColors.bullish
+                        : (sentimentLabel == 'NEGATIVE' ? AppColors.bearish : AppColors.neutral);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          data.latestGeopoliticalHeadline!['source'] ?? 'Global News',
-                          style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                        ),
                         Row(
-                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            if (data.latestGeopoliticalHeadline!['published_at'] != null) ...[
-                              Text(
-                                DateTime.tryParse(data.latestGeopoliticalHeadline!['published_at'] ?? '')?.formatWibShort() ?? '',
-                                style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      h['source'] ?? 'Global News',
+                                      style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (h['published_at'] != null) ...[
+                                    const Text(' • ', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                                    Text(
+                                      DateTime.tryParse(h['published_at'] ?? '')?.formatWibShort() ?? '',
+                                      style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                                    ),
+                                  ],
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(
-                              'Sentimen: ${data.latestGeopoliticalHeadline!['sentiment_label']}',
-                              style: TextStyle(
-                                color: data.latestGeopoliticalHeadline!['sentiment_label'] == 'POSITIVE'
-                                    ? AppColors.bullish
-                                    : (data.latestGeopoliticalHeadline!['sentiment_label'] == 'NEGATIVE'
-                                        ? AppColors.bearish
-                                        : AppColors.neutral),
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: sentimentColor.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: sentimentColor.withValues(alpha: 0.35), width: 0.8),
+                              ),
+                              child: Text(
+                                'Sentimen: $sentimentLabel',
+                                style: TextStyle(
+                                  color: sentimentColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      data.latestGeopoliticalHeadline!['title'] ?? '',
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
+                        const SizedBox(height: 6),
                         Text(
-                          'Buka & Baca Penjelasan',
-                          style: TextStyle(
-                            color: AppColors.primary.withValues(alpha: 0.85),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                          h['title'] ?? '',
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            height: 1.35,
                           ),
                         ),
-                        const SizedBox(width: 3),
-                        const Icon(CupertinoIcons.chevron_right, color: AppColors.primary, size: 11),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Buka & Baca Penjelasan',
+                              style: TextStyle(
+                                color: AppColors.primary.withValues(alpha: 0.85),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            const Icon(CupertinoIcons.chevron_right, color: AppColors.primary, size: 11),
+                          ],
+                        ),
                       ],
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 16),
@@ -833,22 +853,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(CupertinoIcons.chart_bar_alt_fill, color: AppColors.primary, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Trend: ${data.technicalSnapshot['trend'] ?? 'NEUTRAL'}',
-                            style: TextStyle(
-                              color: data.technicalSnapshot['trend'] == 'BULLISH'
-                                  ? AppColors.bullish
-                                  : (data.technicalSnapshot['trend'] == 'BEARISH' ? AppColors.bearish : AppColors.neutral),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(CupertinoIcons.chart_bar_alt_fill, color: AppColors.primary, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Trend: ${data.technicalSnapshot['trend'] ?? 'NEUTRAL'}',
+                                style: TextStyle(
+                                  color: data.technicalSnapshot['trend'] == 'BULLISH'
+                                      ? AppColors.bullish
+                                      : (data.technicalSnapshot['trend'] == 'BEARISH' ? AppColors.bearish : AppColors.neutral),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         'RSI: ${data.technicalSnapshot['rsi'] ?? '-'} (${data.technicalSnapshot['rsi_status'] ?? '-'})',
                         style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontFamily: 'monospace'),
