@@ -106,7 +106,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final topPadding = mediaQuery.padding.top + kToolbarHeight + 12;
+    const double topPadding = 14.0;
     final bottomPadding = mediaQuery.padding.bottom + 64 + 24;
 
     return Scaffold(
@@ -130,7 +130,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                   onRefresh: _loadReport,
                   color: AppColors.primary,
                   backgroundColor: const Color(0xFF1C1C1E),
-                  edgeOffset: mediaQuery.padding.top + kToolbarHeight,
+                  edgeOffset: 0,
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                     padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPadding),

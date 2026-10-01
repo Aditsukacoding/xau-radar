@@ -188,66 +188,66 @@ class _MainShellState extends State<MainShell> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      extendBody: true, // Allow body to scroll behind floating frosted glass bar
-      extendBodyBehindAppBar: true, // Allow body behind glass appbar
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(56),
-        child: ClipRect(
+      extendBody: true, // Allow body to scroll behind floating frosted glass bottom bar
+      extendBodyBehindAppBar: false, // Clean natural layout: body starts directly below the AppBar
+      appBar: AppBar(
+        backgroundColor: const Color(0xEB0A0D14),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        flexibleSpace: ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-            child: AppBar(
-              backgroundColor: Colors.black.withValues(alpha: 0.65),
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.secondary],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(CupertinoIcons.waveform_path_ecg, color: Colors.black, size: 16),
-                  ),
-                  const SizedBox(width: 10),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'XAU/USD RADAR',
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      Text(
-                        'Apple Style 3-Pillar Bias Engine',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.primary,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(CupertinoIcons.gear_alt, color: AppColors.textMuted, size: 20),
-                  tooltip: 'Konfigurasi IP',
-                  onPressed: _showServerSettingsDialog,
-                ),
-                const SizedBox(width: 6),
-              ],
-            ),
+            child: Container(color: Colors.transparent),
           ),
         ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.primary, AppColors.secondary],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(CupertinoIcons.waveform_path_ecg, color: Colors.black, size: 16),
+            ),
+            const SizedBox(width: 10),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'XAU/USD RADAR',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  'Apple Style 3-Pillar Bias Engine',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.primary,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(CupertinoIcons.gear_alt, color: AppColors.textMuted, size: 20),
+            tooltip: 'Konfigurasi IP',
+            onPressed: _showServerSettingsDialog,
+          ),
+          const SizedBox(width: 6),
+        ],
       ),
       body: IndexedStack(
         index: _currentIndex,

@@ -102,14 +102,14 @@ class _FundamentalScreenState extends State<FundamentalScreen> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final topInset = mediaQuery.padding.top + kToolbarHeight + 8;
+    const double topInset = 8.0;
     final bottomInset = mediaQuery.padding.bottom + 64 + 20;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          SizedBox(height: topInset), // Inset for floating glass appbar
+          const SizedBox(height: topInset),
 
           // Header Status & Sync Bar
           Padding(
