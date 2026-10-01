@@ -16,10 +16,16 @@ class ApiService {
   ApiService._internal();
 
   // Base URL configuration:
-  // On Web: Auto-detects host (e.g. 192.168.1.53 when opened from phone, or 127.0.0.1 on PC)
+  // Production: Set via --dart-define=BACKEND_URL=https://api.yoursite.com/api/v1 at build time
+  // On Web (local): Auto-detects host (e.g. 192.168.1.53 when opened from iPhone on LAN)
   // On Android Emulator: 10.0.2.2
-  // On Native App: defaults to local network IP or 127.0.0.1
+  // On Native App: defaults to 127.0.0.1
+  static const String _buildTimeBackendUrl = String.fromEnvironment('BACKEND_URL', defaultValue: '');
+
   static String get _defaultBaseUrl {
+    // 1. Build-time constant wins (used for production deployment)
+    if (_buildTimeBackendUrl.isNotEmpty) return _buildTimeBackendUrl;
+    // 2. Web: auto-detect from window.location.host so it works both on PC and iPhone LAN
     if (kIsWeb) {
       final host = (Uri.base.host.isNotEmpty && Uri.base.host != 'localhost')
           ? Uri.base.host

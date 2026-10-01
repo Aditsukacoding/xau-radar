@@ -1,13 +1,17 @@
 {
-    "name": "mobile_app",
-    "short_name": "mobile_app",
-    "start_url": ".",
+    "name": "XAU/USD RADAR — Institutional Bias Engine",
+    "short_name": "XAU Radar",
+    "start_url": "./",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#000000",
+    "theme_color": "#000000",
+    "description": "Institutional Macro & Technical Trading Analytics for XAU/USD. Real-time bias engine.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "categories": ["finance", "business"],
+    "lang": "id",
+    "scope": "./",
+    "id": "xauusd-radar",
     "icons": [
         {
             "src": "icons/Icon-192.png",
