@@ -1,0 +1,3 @@
+@echo off
+echo Membuka folder file installer APK Android...
+explorer.exe /select,"C:\Users\Aditya\Desktop\analitic\mobile_app\build\app\outputs\flutter-apk\app-release.apk"
