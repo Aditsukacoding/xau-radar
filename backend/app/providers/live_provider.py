@@ -518,38 +518,92 @@ class LiveDataProvider(BaseDataProvider):
             return articles[:limit]
         return []
 
+    @staticmethod
+    def _is_xau_relevant(text: str) -> bool:
+        """
+        Filters news to strictly ensure only articles genuinely impacting XAU/USD,
+        precious metals, the US Dollar, the Fed, Treasury yields, inflation data,
+        or geopolitical safe-haven drivers are ingested. Eliminates unrelated single stocks.
+        """
+        keywords = [
+            # Direct Gold & Metals
+            "gold", "xau", "bullion", "precious metal", "spot gold", "gold future", "metals", "silver",
+            # Fed & US Monetary Policy (Primary Gold Drivers)
+            "fed", "federal reserve", "powell", "fomc", "interest rate", "rate cut", "rate hike",
+            "central bank", "monetary policy", "treasury", "yield", "dollar", "dxy", "greenback",
+            # Macro Catalysts
+            "inflation", "cpi", "pce", "ppi", "nfp", "nonfarm", "payroll", "unemployment", "gdp", "recession",
+            # Geopolitical Safe-Haven Drivers
+            "safe-haven", "safe haven", "geopolitic", "war", "conflict", "sanction", "tariff", "trade war",
+            "middle east", "iran", "israel", "hormuz", "ukraine", "russia", "china trade", "brics"
+        ]
+        t = text.lower()
+        return any(k in t for k in keywords)
+
+    @staticmethod
+    def _parse_pub_date(date_str: Optional[str]) -> datetime:
+        """Robust multi-format date parser supporting RSS, ISO, and SQL datetime strings."""
+        if not date_str:
+            return datetime.now(timezone.utc)
+        date_str = date_str.strip()
+        formats = [
+            "%a, %d %b %Y %H:%M:%S %Z",
+            "%a, %d %b %Y %H:%M:%S %z",
+            "%a, %d %b %Y %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%d %b %Y %H:%M:%S",
+        ]
+        for fmt in formats:
+            try:
+                dt = datetime.strptime(date_str[:25].strip(), fmt)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except Exception:
+                pass
+        return datetime.now(timezone.utc)
+
     async def _fetch_google_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
+        """
+        Provider 1: Google News Multi-Stream Targeted Wire
+        Aggregates global real-time wire from Kitco, FXStreet, Reuters, Bloomberg, FXEmpire, etc.
+        """
         rss_feeds = [
-            ("Google News: Gold", "https://news.google.com/rss/search?q=Gold+price+precious+metals+XAUUSD&hl=en-US&gl=US&ceid=US:en"),
-            ("Google News: Geopolitics", "https://news.google.com/rss/search?q=geopolitics+middle+east+sanctions+trade+war+conflict&hl=en-US&gl=US&ceid=US:en"),
-            ("Google News: The Fed", "https://news.google.com/rss/search?q=Federal+Reserve+inflation+interest+rates+dollar+Treasury&hl=en-US&gl=US&ceid=US:en"),
-            ("Google News: World Crisis", "https://news.google.com/rss/search?q=breaking+world+crisis+escalation+tariffs+diplomacy+war&hl=en-US&gl=US&ceid=US:en"),
+            "https://news.google.com/rss/search?q=XAUUSD+OR+%22gold+price%22+OR+%22spot+gold%22+OR+%22gold+futures%22&hl=en-US&gl=US&ceid=US:en",
+            "https://news.google.com/rss/search?q=%22Federal+Reserve%22+OR+%22US+dollar%22+OR+%22Treasury+yields%22+OR+%22inflation+data%22+gold&hl=en-US&gl=US&ceid=US:en",
+            "https://news.google.com/rss/search?q=%22safe-haven%22+gold+OR+%22Middle+East%22+gold+OR+%22geopolitics%22+gold&hl=en-US&gl=US&ceid=US:en",
         ]
         results = []
-        for cat, url in rss_feeds:
+        for url in rss_feeds:
             try:
                 r = await client.get(url, timeout=5.0)
                 if r.status_code == 200:
                     root = ET.fromstring(r.text)
-                    for item in root.findall(".//item")[:10]:
+                    for item in root.findall(".//item")[:15]:
                         title_el = item.find("title")
                         if title_el is None or not title_el.text:
                             continue
                         full_title = title_el.text.strip()
-                        title_part, source_part = (full_title.rsplit(" - ", 1) if " - " in full_title else (full_title, "Google News"))
+                        if " - " in full_title:
+                            title_part, source_part = full_title.rsplit(" - ", 1)
+                        else:
+                            title_part, source_part = full_title, "Global Desk"
+                        
+                        if not self._is_xau_relevant(title_part):
+                            continue
+
                         pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                        try:
-                            pub_time = datetime.strptime(pub_str[:25].strip(), "%a, %d %b %Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                        except Exception:
-                            pub_time = datetime.now(timezone.utc)
+                        pub_time = self._parse_pub_date(pub_str)
                         link_el = item.find("link")
                         sent_label, sent_score = self._compute_sentiment(title_part)
                         results.append({
                             "symbol": symbol.upper(),
                             "title": title_part.strip(),
-                            "source": f"{source_part.strip()} • Google News",
+                            "source": source_part.strip(),
                             "url": link_el.text if link_el is not None else "",
-                            "summary": f"Pemantauan terpusat Google News seputar dinamika makro dan geopolitik global yang menggerakkan instrumen {symbol}.",
+                            "summary": f"Liputan langsung pasar emas dan kebijakan makroekonomi dari {source_part.strip()}.",
                             "sentiment_label": sent_label,
                             "sentiment_score": sent_score,
                             "published_at": pub_time,
@@ -559,7 +613,7 @@ class LiveDataProvider(BaseDataProvider):
         return results
 
     async def _fetch_yahoo_finance_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
-        """Provider 2: Yahoo Finance Official News API"""
+        """Provider 2: Yahoo Finance Official Gold & Macro News API"""
         url = "https://query1.finance.yahoo.com/v1/finance/search?q=Gold&newsCount=15"
         results = []
         try:
@@ -569,7 +623,7 @@ class LiveDataProvider(BaseDataProvider):
                 news_items = data.get("news", [])
                 for n in news_items:
                     title = n.get("title", "").strip()
-                    if not title:
+                    if not title or not self._is_xau_relevant(title):
                         continue
                     pub_ts = n.get("providerPublishTime")
                     pub_time = datetime.fromtimestamp(pub_ts, tz=timezone.utc) if pub_ts else datetime.now(timezone.utc)
@@ -578,7 +632,7 @@ class LiveDataProvider(BaseDataProvider):
                     results.append({
                         "symbol": symbol.upper(),
                         "title": title,
-                        "source": f"{publisher} • Yahoo Finance",
+                        "source": publisher,
                         "url": n.get("link", ""),
                         "summary": "Analisis pasar modal dan komoditas resmi dari portal Yahoo Finance Wall Street.",
                         "sentiment_label": sent_label,
@@ -602,17 +656,16 @@ class LiveDataProvider(BaseDataProvider):
                     if title_el is None or not title_el.text:
                         continue
                     title = title_el.text.strip()
+                    if not self._is_xau_relevant(title):
+                        continue
                     pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                    try:
-                        pub_time = datetime.strptime(pub_str[:25].strip(), "%a, %d %b %Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                    except Exception:
-                        pub_time = datetime.now(timezone.utc)
+                    pub_time = self._parse_pub_date(pub_str)
                     link_el = item.find("link")
                     sent_label, sent_score = self._compute_sentiment(title)
                     results.append({
                         "symbol": symbol.upper(),
                         "title": title,
-                        "source": "ForexLive • Interbank Desk",
+                        "source": "ForexLive",
                         "url": link_el.text if link_el is not None else "",
                         "summary": "Komentar langsung dan sentimen pergerakan pasar valuta serta emas dari meja trading ForexLive.",
                         "sentiment_label": sent_label,
@@ -626,7 +679,7 @@ class LiveDataProvider(BaseDataProvider):
     async def _fetch_cnbc_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
         """Provider 4: CNBC Finance & World News Wire"""
         cnbc_urls = [
-            ("CNBC Finance", "https://www.cnbc.com/id/10000664/device/rss/rss.html"),
+            ("CNBC", "https://www.cnbc.com/id/10000664/device/rss/rss.html"),
             ("CNBC World", "https://www.cnbc.com/id/100727362/device/rss/rss.html"),
         ]
         results = []
@@ -635,22 +688,21 @@ class LiveDataProvider(BaseDataProvider):
                 r = await client.get(url, timeout=5.0)
                 if r.status_code == 200:
                     root = ET.fromstring(r.text)
-                    for item in root.findall(".//item")[:10]:
+                    for item in root.findall(".//item")[:15]:
                         title_el = item.find("title")
                         if title_el is None or not title_el.text:
                             continue
                         title = title_el.text.strip()
+                        if not self._is_xau_relevant(title):
+                            continue
                         pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                        try:
-                            pub_time = datetime.strptime(pub_str[:25].strip(), "%a, %d %b %Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                        except Exception:
-                            pub_time = datetime.now(timezone.utc)
+                        pub_time = self._parse_pub_date(pub_str)
                         link_el = item.find("link")
                         sent_label, sent_score = self._compute_sentiment(title)
                         results.append({
                             "symbol": symbol.upper(),
                             "title": title,
-                            "source": f"{name} • Global Wire",
+                            "source": name,
                             "url": link_el.text if link_el is not None else "",
                             "summary": "Laporan ekonomi makro dan diplomasi internasional dari kantor berita CNBC.",
                             "sentiment_label": sent_label,
@@ -669,31 +721,21 @@ class LiveDataProvider(BaseDataProvider):
             r = await client.get(url, timeout=5.0)
             if r.status_code == 200:
                 root = ET.fromstring(r.text)
-                for item in root.findall(".//item")[:15]:
+                for item in root.findall(".//item")[:20]:
                     title_el = item.find("title")
                     if title_el is None or not title_el.text:
                         continue
                     title = title_el.text.strip()
-                    lower_t = title.lower()
-                    # Filter for geopolitical/crisis relevancy
-                    is_relevant = any(k in lower_t for k in [
-                        "war", "conflict", "attack", "strike", "missile", "iran", "israel",
-                        "lebanon", "ukraine", "russia", "china", "taiwan", "sanction",
-                        "trade", "military", "crisis", "threat", "oil", "gaza", "yemen"
-                    ])
-                    if not is_relevant:
+                    if not self._is_xau_relevant(title):
                         continue
                     pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                    try:
-                        pub_time = datetime.strptime(pub_str[:25].strip(), "%a, %d %b %Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                    except Exception:
-                        pub_time = datetime.now(timezone.utc)
+                    pub_time = self._parse_pub_date(pub_str)
                     link_el = item.find("link")
                     sent_label, sent_score = self._compute_sentiment(title)
                     results.append({
                         "symbol": symbol.upper(),
                         "title": title,
-                        "source": "Al Jazeera • Geopolitics",
+                        "source": "Al Jazeera",
                         "url": link_el.text if link_el is not None else "",
                         "summary": "Laporan garis depan tensi geopolitik regional dan eskalasi krisis yang mempengaruhi aset safe-haven.",
                         "sentiment_label": sent_label,
@@ -705,29 +747,28 @@ class LiveDataProvider(BaseDataProvider):
         return results
 
     async def _fetch_investing_com_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
-        """Provider 6: Investing.com Commodities Wire"""
+        """Provider 6: Investing.com Commodities Wire (Filtered for Metals & Macro)"""
         url = "https://www.investing.com/rss/news_25.rss"
         results = []
         try:
             r = await client.get(url, timeout=5.0)
             if r.status_code == 200:
                 root = ET.fromstring(r.text)
-                for item in root.findall(".//item")[:10]:
+                for item in root.findall(".//item")[:20]:
                     title_el = item.find("title")
                     if title_el is None or not title_el.text:
                         continue
                     title = title_el.text.strip()
+                    if not self._is_xau_relevant(title):
+                        continue
                     pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                    try:
-                        pub_time = datetime.strptime(pub_str[:25].strip(), "%a, %d %b %Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                    except Exception:
-                        pub_time = datetime.now(timezone.utc)
+                    pub_time = self._parse_pub_date(pub_str)
                     link_el = item.find("link")
                     sent_label, sent_score = self._compute_sentiment(title)
                     results.append({
                         "symbol": symbol.upper(),
                         "title": title,
-                        "source": "Investing.com • Commodities",
+                        "source": "Investing.com",
                         "url": link_el.text if link_el is not None else "",
                         "summary": "Perkembangan pasokan fisik komoditas, pasar minyak, dan pergerakan emas dari Investing.com.",
                         "sentiment_label": sent_label,
@@ -741,8 +782,8 @@ class LiveDataProvider(BaseDataProvider):
     async def _fetch_wsj_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
         """Provider 7: The Wall Street Journal (WSJ) Markets & World Wire"""
         wsj_urls = [
-            ("WSJ Markets", "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
-            ("WSJ World", "https://feeds.a.dj.com/rss/RSSWorldNews.xml"),
+            ("The Wall Street Journal", "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
+            ("The Wall Street Journal", "https://feeds.a.dj.com/rss/RSSWorldNews.xml"),
         ]
         results = []
         for name, url in wsj_urls:
@@ -750,22 +791,21 @@ class LiveDataProvider(BaseDataProvider):
                 r = await client.get(url, timeout=5.0)
                 if r.status_code == 200:
                     root = ET.fromstring(r.text)
-                    for item in root.findall(".//item")[:10]:
+                    for item in root.findall(".//item")[:15]:
                         title_el = item.find("title")
                         if title_el is None or not title_el.text:
                             continue
                         title = title_el.text.strip()
+                        if not self._is_xau_relevant(title):
+                            continue
                         pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                        try:
-                            pub_time = datetime.strptime(pub_str[:25].strip(), "%a, %d %b %Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                        except Exception:
-                            pub_time = datetime.now(timezone.utc)
+                        pub_time = self._parse_pub_date(pub_str)
                         link_el = item.find("link")
                         sent_label, sent_score = self._compute_sentiment(title)
                         results.append({
                             "symbol": symbol.upper(),
                             "title": title,
-                            "source": f"{name} • Dow Jones",
+                            "source": name,
                             "url": link_el.text if link_el is not None else "",
                             "summary": "Analisis pasar modal institusional dan dinamika ekonomi global dari The Wall Street Journal.",
                             "sentiment_label": sent_label,
@@ -784,22 +824,21 @@ class LiveDataProvider(BaseDataProvider):
             r = await client.get(url, timeout=5.0)
             if r.status_code == 200:
                 root = ET.fromstring(r.text)
-                for item in root.findall(".//item")[:15]:
+                for item in root.findall(".//item")[:20]:
                     title_el = item.find("title")
                     if title_el is None or not title_el.text:
                         continue
                     title = title_el.text.strip()
+                    if not self._is_xau_relevant(title):
+                        continue
                     pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                    try:
-                        pub_time = datetime.strptime(pub_str[:25].strip(), "%a, %d %b %Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                    except Exception:
-                        pub_time = datetime.now(timezone.utc)
+                    pub_time = self._parse_pub_date(pub_str)
                     link_el = item.find("link")
                     sent_label, sent_score = self._compute_sentiment(title)
                     results.append({
                         "symbol": symbol.upper(),
                         "title": title,
-                        "source": "MarketWatch • Financial Wire",
+                        "source": "MarketWatch",
                         "url": link_el.text if link_el is not None else "",
                         "summary": "Berita kilat pasar finansial, pergerakan suku bunga, dan obligasi global dari MarketWatch.",
                         "sentiment_label": sent_label,
@@ -818,32 +857,21 @@ class LiveDataProvider(BaseDataProvider):
             r = await client.get(url, timeout=5.0)
             if r.status_code == 200:
                 root = ET.fromstring(r.text)
-                for item in root.findall(".//item")[:15]:
+                for item in root.findall(".//item")[:20]:
                     title_el = item.find("title")
                     if title_el is None or not title_el.text:
                         continue
                     title = title_el.text.strip()
-                    lower_t = title.lower()
-                    # Filter for geopolitical/crisis relevancy
-                    is_relevant = any(k in lower_t for k in [
-                        "war", "conflict", "attack", "strike", "missile", "iran", "israel",
-                        "lebanon", "ukraine", "russia", "china", "taiwan", "sanction", "trump",
-                        "trade", "military", "crisis", "threat", "oil", "gaza", "yemen", "summit",
-                        "nuclear", "security", "border"
-                    ])
-                    if not is_relevant:
+                    if not self._is_xau_relevant(title):
                         continue
                     pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                    try:
-                        pub_time = datetime.strptime(pub_str[:25].strip(), "%a, %d %b %Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                    except Exception:
-                        pub_time = datetime.now(timezone.utc)
+                    pub_time = self._parse_pub_date(pub_str)
                     link_el = item.find("link")
                     sent_label, sent_score = self._compute_sentiment(title)
                     results.append({
                         "symbol": symbol.upper(),
                         "title": title,
-                        "source": "BBC News • World Geopolitics",
+                        "source": "BBC News",
                         "url": link_el.text if link_el is not None else "",
                         "summary": "Laporan diplomasi global, resolusi konflik, dan krisis geopolitik internasional dari BBC World.",
                         "sentiment_label": sent_label,
