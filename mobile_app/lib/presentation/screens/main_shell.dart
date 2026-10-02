@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -279,7 +280,14 @@ class _IosTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.of(context).padding.bottom;
+    final mediaQuery = MediaQuery.of(context);
+    final rawBottom = mediaQuery.padding.bottom;
+    final isMobile = mediaQuery.size.width < 768;
+    // On iPhone (Safari / PWA / Face ID devices), rawBottom may report 0 in browser mode.
+    // Enforcing a baseline clearance of 28-34pt ensures the navbar icons and text
+    // sit comfortably above the iOS Home Indicator swipe bar.
+    final double safeBottom = isMobile ? max(rawBottom, 28.0) : (rawBottom > 0 ? rawBottom : 10.0);
+
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
@@ -294,9 +302,10 @@ class _IosTabBar extends StatelessWidget {
               ),
             ),
           ),
-          padding: EdgeInsets.only(bottom: bottom),
-          height: 49.0 + bottom,
+          padding: EdgeInsets.only(bottom: safeBottom, top: 4.0),
+          height: 49.0 + safeBottom + 4.0,
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: List.generate(_tabs.length, (i) {
               final tab = _tabs[i];
               final selected = i == currentIndex;
