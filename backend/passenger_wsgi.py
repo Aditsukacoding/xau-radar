@@ -40,3 +40,32 @@ except Exception as e:
 </body>
 </html>"""
         return [html.encode('utf-8')]
+
+if __name__ == "__main__":
+    print("\n[Self-Test] Menjalankan pengecekan backend...")
+    print("Python:", sys.version)
+    print("Application:", type(application))
+    
+    environ = {
+        'REQUEST_METHOD': 'GET',
+        'PATH_INFO': '/health',
+        'SERVER_NAME': 'localhost',
+        'SERVER_PORT': '80',
+        'wsgi.version': (1, 0),
+        'wsgi.url_scheme': 'http',
+        'wsgi.input': sys.stdin.buffer if hasattr(sys.stdin, 'buffer') else sys.stdin,
+        'wsgi.errors': sys.stderr,
+        'wsgi.multithread': False,
+        'wsgi.multiprocess': False,
+        'wsgi.run_once': False,
+    }
+    def _test_start(status, headers, exc=None):
+        print("HTTP Status:", status)
+    
+    try:
+        chunks = application(environ, _test_start)
+        for c in chunks:
+            print("Response:", c.decode('utf-8', errors='ignore'))
+        print("\n[OK] BACKEND SIAP & BERJALAN SEMPURNA!\n")
+    except Exception as e:
+        print("[FAIL] Error:", e)
