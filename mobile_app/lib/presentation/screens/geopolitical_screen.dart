@@ -82,7 +82,7 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    const double topInset = 8.0;
+    const double topInset = 16.0;
     final bottomInset = mediaQuery.padding.bottom + 64 + 20;
 
     return Scaffold(

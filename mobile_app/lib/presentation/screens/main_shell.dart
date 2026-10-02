@@ -202,52 +202,74 @@ class _MainShellState extends State<MainShell> {
             child: Container(color: Colors.transparent),
           ),
         ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.secondary],
+        title: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _showServerSettingsDialog,
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.primary, AppColors.secondary],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                borderRadius: BorderRadius.circular(10),
+                child: const Icon(CupertinoIcons.waveform_path_ecg, color: Colors.black, size: 16),
               ),
-              child: const Icon(CupertinoIcons.waveform_path_ecg, color: Colors.black, size: 16),
-            ),
-            const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'XAU/USD RADAR',
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
-                    color: AppColors.textPrimary,
+              const SizedBox(width: 10),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'XAU/USD RADAR',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-                Text(
-                  'Apple Style 3-Pillar Bias Engine',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.primary,
-                    letterSpacing: 0.2,
+                  Text(
+                    'Apple Style 3-Pillar Bias Engine',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primary,
+                      letterSpacing: 0.2,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(CupertinoIcons.gear_alt, color: AppColors.textMuted, size: 20),
-            tooltip: 'Konfigurasi IP',
-            onPressed: _showServerSettingsDialog,
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minSize: 44,
+                onPressed: _showServerSettingsDialog,
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0x28FFFFFF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.gear_alt_fill,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
           ),
-          const SizedBox(width: 6),
         ],
       ),
       body: IndexedStack(

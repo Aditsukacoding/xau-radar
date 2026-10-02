@@ -64,13 +64,16 @@ def create_backend_zip():
 
 def create_frontend_zip():
     web_dir = os.path.join(ROOT, "mobile_app", "build", "web")
-    out_zip = os.path.join(ROOT, "frontend_upload.zip")
+    out_zip = os.path.join(ROOT, "frontend_update.zip")
     if not os.path.exists(web_dir):
         print("[WARN] mobile_app/build/web does not exist yet.")
         return
 
     if os.path.exists(out_zip):
-        os.remove(out_zip)
+        try:
+            os.remove(out_zip)
+        except Exception:
+            pass
 
     with zipfile.ZipFile(out_zip, "w", zipfile.ZIP_DEFLATED) as z:
         for root, dirs, files in os.walk(web_dir):
@@ -80,7 +83,15 @@ def create_frontend_zip():
                 z.write(file_path, arcname)
 
     size_mb = os.path.getsize(out_zip) / (1024 * 1024)
-    print(f"[OK] frontend_upload.zip created ({size_mb:.2f} MB)")
+    print(f"[OK] frontend_update.zip created ({size_mb:.2f} MB)")
+
+    # Also try copying to frontend_upload.zip if not locked
+    legacy_zip = os.path.join(ROOT, "frontend_upload.zip")
+    try:
+        shutil.copyfile(out_zip, legacy_zip)
+        print(f"[OK] frontend_upload.zip updated ({size_mb:.2f} MB)")
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     create_backend_zip()
