@@ -143,7 +143,7 @@ class ApiService {
   Future<Map<String, dynamic>> getLivePriceTick({String symbol = 'XAUUSD'}) async {
     final response = await http
         .get(Uri.parse('$baseUrl/technical/live-price/$symbol'))
-        .timeout(const Duration(seconds: 4));
+        .timeout(const Duration(seconds: 10));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {

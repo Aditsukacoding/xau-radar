@@ -99,7 +99,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
       final results = await Future.wait([
         _api.getCandles('XAUUSD', timeframe: _activeTimeframe, limit: 60),
         _api.getTechnicalIndicators('XAUUSD', timeframe: _activeTimeframe),
-        _api.getLivePriceTick(symbol: 'XAUUSD'),
+        _api.getLivePriceTick(symbol: 'XAUUSD').catchError((_) => <String, dynamic>{}),
         _api.getLatestAnalysis(symbol: 'XAUUSD').then<TradeSetupModel?>((rep) => rep.tradeSetup).catchError((_) => null),
       ]);
 
