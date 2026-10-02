@@ -31,6 +31,7 @@ class _MainShellState extends State<MainShell> {
     final controller = TextEditingController(text: ApiService.baseUrl);
     showGeneralDialog(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: true,
       barrierLabel: 'ServerSettings',
       barrierColor: Colors.black.withValues(alpha: 0.72),
@@ -180,7 +181,10 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> screens = [
-      DashboardScreen(onNavigateTab: _onTabSelected),
+      DashboardScreen(
+        onNavigateTab: _onTabSelected,
+        onOpenSettings: _showServerSettingsDialog,
+      ),
       const FundamentalScreen(),
       const GeopoliticalScreen(),
       const TechnicalScreen(),
@@ -196,12 +200,6 @@ class _MainShellState extends State<MainShell> {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        flexibleSpace: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-            child: Container(color: Colors.transparent),
-          ),
-        ),
         title: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _showServerSettingsDialog,
@@ -249,23 +247,22 @@ class _MainShellState extends State<MainShell> {
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Center(
-              child: CupertinoButton(
-                padding: EdgeInsets.zero,
-                minSize: 44,
+              child: IconButton(
                 onPressed: _showServerSettingsDialog,
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: const Color(0x28FFFFFF),
+                iconSize: 20,
+                tooltip: 'Pengaturan Server',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0x351F2636),
+                  minimumSize: const Size(44, 44),
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderSubtle),
+                    side: BorderSide(color: AppColors.primary.withValues(alpha: 0.7), width: 1.2),
                   ),
-                  child: const Icon(
-                    CupertinoIcons.gear_alt_fill,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
+                ),
+                icon: const Icon(
+                  CupertinoIcons.gear_alt_fill,
+                  color: AppColors.primary,
                 ),
               ),
             ),

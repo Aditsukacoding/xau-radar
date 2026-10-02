@@ -19,8 +19,9 @@ import '../widgets/modern_toast.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Function(int)? onNavigateTab;
+  final VoidCallback? onOpenSettings;
 
-  const DashboardScreen({super.key, this.onNavigateTab});
+  const DashboardScreen({super.key, this.onNavigateTab, this.onOpenSettings});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -305,6 +306,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                   ),
+                  if (widget.onOpenSettings != null) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: widget.onOpenSettings,
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0x351F2636),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.5)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(CupertinoIcons.slider_horizontal_3, color: AppColors.primary, size: 11),
+                            SizedBox(width: 4),
+                            Text(
+                              'SERVER',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
