@@ -1,4 +1,7 @@
+import os
+import sys
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,17 +10,14 @@ from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
 from app.api.v1.router import api_router
 from app.services.ingestion_service import IngestionService
+from app.services.analysis_service import AnalysisService
+from app.providers import get_data_provider
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 logger = logging.getLogger("trading_backend")
-
-
-import asyncio
-from app.services.analysis_service import AnalysisService
-from app.providers import get_data_provider
 
 async def _background_price_tick_loop():
     """
@@ -101,11 +101,16 @@ async def lifespan(app: FastAPI):
         db.close()
 
     # 3. Start continuous sub-second live price tick worker & background ingestion daemon
-    # (Only active in standalone ASGI/Uvicorn mode; disabled in synchronous WSGI/Passenger to avoid thread hangs)
-    is_wsgi = bool(os.environ.get("IS_WSGI") or os.environ.get("PASSENGER_APP_ENV"))
+    # (Only active in standalone ASGI/Uvicorn mode; disabled in serverless/WSGI to avoid thread hangs)
+    is_serverless = bool(
+        os.environ.get("IS_WSGI")
+        or os.environ.get("PASSENGER_APP_ENV")
+        or os.environ.get("VERCEL")
+        or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+    )
     price_task = None
     ingestion_task = None
-    if not is_wsgi:
+    if not is_serverless:
         price_task = asyncio.create_task(_background_price_tick_loop())
         ingestion_task = asyncio.create_task(_background_auto_ingestion_loop())
 

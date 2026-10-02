@@ -3,18 +3,26 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
 import os
 
-# Ensure data directory exists if using SQLite
-if settings.DATABASE_URL.startswith("sqlite"):
-    db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+# Ensure database URL is safe for serverless/read-only environments
+db_url = settings.DATABASE_URL
+if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    db_url = "sqlite:////tmp/trading_analytics.db"
+
+if db_url.startswith("sqlite"):
+    db_path = db_url.replace("sqlite:///", "")
     db_dir = os.path.dirname(db_path)
     if db_dir and not os.path.exists(db_dir):
-        os.makedirs(db_dir, exist_ok=True)
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+        except OSError:
+            # Read-only filesystem (e.g. AWS Lambda / Vercel), fall back to /tmp
+            db_url = "sqlite:////tmp/trading_analytics.db"
     connect_args = {"check_same_thread": False}
 else:
     connect_args = {}
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     connect_args=connect_args,
     echo=False
 )

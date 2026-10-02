@@ -39,70 +39,88 @@ class IngestionService:
             db.commit()
 
         # 2. Seed Economic Events
-        event_count = db.query(EconomicEvent).count()
-        if event_count == 0:
-            logger.info("Fetching real/initial economic calendar events...")
-            raw_events = await provider.get_economic_calendar()
-            for ev in raw_events:
-                event_obj = EconomicEvent(
-                    external_id=ev.get("external_id"),
-                    currency=ev.get("currency", "USD"),
-                    event_title=ev.get("event_title"),
-                    impact_level=ev.get("impact_level", "HIGH"),
-                    scheduled_at=ev.get("scheduled_at"),
-                    actual_value=ev.get("actual_value"),
-                    forecast_value=ev.get("forecast_value"),
-                    previous_value=ev.get("previous_value"),
-                    unit=ev.get("unit"),
-                    sentiment_impact=ev.get("sentiment_impact"),
-                )
-                db.add(event_obj)
-            db.commit()
+        try:
+            event_count = db.query(EconomicEvent).count()
+            if event_count == 0:
+                logger.info("Fetching real/initial economic calendar events...")
+                raw_events = await provider.get_economic_calendar()
+                for ev in raw_events:
+                    event_obj = EconomicEvent(
+                        external_id=ev.get("external_id"),
+                        currency=ev.get("currency", "USD"),
+                        event_title=ev.get("event_title"),
+                        impact_level=ev.get("impact_level", "HIGH"),
+                        scheduled_at=ev.get("scheduled_at"),
+                        actual_value=ev.get("actual_value"),
+                        forecast_value=ev.get("forecast_value"),
+                        previous_value=ev.get("previous_value"),
+                        unit=ev.get("unit"),
+                        sentiment_impact=ev.get("sentiment_impact"),
+                    )
+                    db.add(event_obj)
+                db.commit()
+        except Exception as e:
+            logger.warning(f"Initial calendar seed skipped/failed: {e}")
+            db.rollback()
 
         # 3. Seed News Articles
-        news_count = db.query(NewsArticle).count()
-        if news_count == 0:
-            logger.info("Fetching real/initial geopolitical & market news...")
-            raw_news = await provider.get_news_articles(symbol="XAUUSD", limit=20)
-            for nw in raw_news:
-                news_obj = NewsArticle(
-                    symbol=nw.get("symbol", "XAUUSD"),
-                    title=nw.get("title"),
-                    source=nw.get("source"),
-                    url=nw.get("url"),
-                    summary=nw.get("summary"),
-                    sentiment_label=nw.get("sentiment_label", "NEUTRAL"),
-                    sentiment_score=nw.get("sentiment_score", 0.0),
-                    published_at=nw.get("published_at"),
-                )
-                db.add(news_obj)
-            db.commit()
+        try:
+            news_count = db.query(NewsArticle).count()
+            if news_count == 0:
+                logger.info("Fetching real/initial geopolitical & market news...")
+                raw_news = await provider.get_news_articles(symbol="XAUUSD", limit=20)
+                for nw in raw_news:
+                    news_obj = NewsArticle(
+                        symbol=nw.get("symbol", "XAUUSD"),
+                        title=nw.get("title"),
+                        source=nw.get("source"),
+                        url=nw.get("url"),
+                        summary=nw.get("summary"),
+                        sentiment_label=nw.get("sentiment_label", "NEUTRAL"),
+                        sentiment_score=nw.get("sentiment_score", 0.0),
+                        published_at=nw.get("published_at"),
+                    )
+                    db.add(news_obj)
+                db.commit()
+        except Exception as e:
+            logger.warning(f"Initial news seed skipped/failed: {e}")
+            db.rollback()
 
         # 4. Seed Candles for 15m, 1h, 1d
-        candle_count = db.query(PriceCandle).filter(PriceCandle.symbol == "XAUUSD").count()
-        if candle_count == 0:
-            logger.info("Fetching real/initial candlestick price data...")
-            for tf in ["15m", "1h", "1d"]:
-                raw_candles = await provider.get_price_candles(symbol="XAUUSD", timeframe=tf, count=80)
-                for c in raw_candles:
-                    candle_obj = PriceCandle(
-                        symbol=c["symbol"],
-                        timeframe=c["timeframe"],
-                        timestamp=c["timestamp"],
-                        open=c["open"],
-                        high=c["high"],
-                        low=c["low"],
-                        close=c["close"],
-                        volume=c["volume"],
-                    )
-                    db.add(candle_obj)
-            db.commit()
+        try:
+            candle_count = db.query(PriceCandle).filter(PriceCandle.symbol == "XAUUSD").count()
+            if candle_count == 0:
+                logger.info("Fetching real/initial candlestick price data...")
+                for tf in ["15m", "1h", "1d"]:
+                    try:
+                        raw_candles = await provider.get_price_candles(symbol="XAUUSD", timeframe=tf, count=80)
+                        for c in raw_candles:
+                            candle_obj = PriceCandle(
+                                symbol=c["symbol"],
+                                timeframe=c["timeframe"],
+                                timestamp=c["timestamp"],
+                                open=c["open"],
+                                high=c["high"],
+                                low=c["low"],
+                                close=c["close"],
+                                volume=c["volume"],
+                            )
+                            db.add(candle_obj)
+                        db.commit()
+                    except Exception as ce:
+                        logger.warning(f"Candle seed for {tf} failed: {ce}")
+                        db.rollback()
+        except Exception as e:
+            logger.warning(f"Candle count check failed: {e}")
 
         # 5. Generate initial Analysis Report instantly (< 50ms)
-        report_count = db.query(AnalysisReport).filter(AnalysisReport.symbol == "XAUUSD").count()
-        if report_count == 0:
-            logger.info("Generating instant quantitative baseline report (<50ms)...")
-            await AnalysisService._generate_instant_baseline(db, symbol="XAUUSD")
+        try:
+            report_count = db.query(AnalysisReport).filter(AnalysisReport.symbol == "XAUUSD").count()
+            if report_count == 0:
+                logger.info("Generating instant quantitative baseline report (<50ms)...")
+                await AnalysisService._generate_instant_baseline(db, symbol="XAUUSD")
+        except Exception as e:
+            logger.warning(f"Initial baseline report seed failed: {e}")
 
     @staticmethod
     async def sync_live_market_data(db: Session, symbol: str = "XAUUSD"):
