@@ -25,12 +25,14 @@ class ApiService {
   static String get _defaultBaseUrl {
     // 1. Build-time constant wins (used for production deployment)
     if (_buildTimeBackendUrl.isNotEmpty) return _buildTimeBackendUrl;
-    // 2. Web: auto-detect from window.location.host so it works both on PC and iPhone LAN
+    // 2. Web: if on production domain (e.g. ditzy.biz.id or remote hosting), use Vercel backend
     if (kIsWeb) {
-      final host = (Uri.base.host.isNotEmpty && Uri.base.host != 'localhost')
-          ? Uri.base.host
-          : '127.0.0.1';
-      return 'http://$host:8000/api/v1';
+      final host = Uri.base.host;
+      if (host.isNotEmpty && !host.contains('localhost') && host != '127.0.0.1' && !host.startsWith('192.168.')) {
+        return 'https://xau-radar-omega.vercel.app/api/v1';
+      }
+      final devHost = (host.isNotEmpty && host != 'localhost') ? host : '127.0.0.1';
+      return 'http://$devHost:8000/api/v1';
     }
     return defaultTargetPlatform == TargetPlatform.android
         ? 'http://10.0.2.2:8000/api/v1'
