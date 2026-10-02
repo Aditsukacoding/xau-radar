@@ -233,7 +233,15 @@ class NewsIntelligenceService:
                 }
                 user_msg = f"Buat analisis skenario berita mendalam berdasarkan metodologi 9 langkah dan integritas data:\n{json.dumps(context_payload, default=str)}"
                 
-                ai_res = await NewsIntelligenceService._call_llm_with_prompt(user_msg)
+                try:
+                    import asyncio
+                    ai_res = await asyncio.wait_for(
+                        NewsIntelligenceService._call_llm_with_prompt(user_msg),
+                        timeout=4.0
+                    )
+                except Exception as te:
+                    logger.info(f"LLM call timed out or failed ({te}), using institutional dynamic model.")
+                    ai_res = None
                 if ai_res:
                     return NewsIntelligenceService._sanitize_and_validate_news_scenario(
                         ai_res=ai_res,
@@ -301,7 +309,7 @@ class NewsIntelligenceService:
                     "messages": [{"role": "user", "content": user_content}]
                 }
                 try:
-                    async with httpx.AsyncClient(timeout=60.0) as client:
+                    async with httpx.AsyncClient(timeout=3.5) as client:
                         r = await client.post(url, json=body, headers=headers)
                         if r.status_code == 200:
                             text = r.json()["content"][0]["text"].strip()
