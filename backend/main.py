@@ -10,4 +10,4 @@ os.environ.setdefault("IS_WSGI", "true")
 os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("USE_MOCK_DATA", "false")
 
-from app.main import app
+from api.index import app
