@@ -168,3 +168,27 @@ def root():
 @app.get("/health", tags=["Health"])
 def health_check():
     return {"status": "healthy"}
+
+
+from fastapi import Request
+from starlette.responses import JSONResponse
+
+@app.api_route("/diag", methods=["GET", "POST"])
+async def diag(request: Request):
+    return {
+        "url_path": request.url.path,
+        "scope_path": request.scope.get("path"),
+        "headers": dict(request.headers),
+    }
+
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "detail": "Custom Not Found",
+            "received_url_path": request.url.path,
+            "received_scope_path": request.scope.get("path"),
+            "headers": dict(request.headers),
+        }
+    )
