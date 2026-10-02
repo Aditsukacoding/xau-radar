@@ -43,9 +43,13 @@ class ApiService {
     baseUrl = newUrl;
   }
 
+  static const Duration _defaultTimeout = Duration(seconds: 12);
+
   // 1. Dashboard Summary
   Future<DashboardSummaryModel> getDashboardSummary({String symbol = 'XAUUSD'}) async {
-    final response = await http.get(Uri.parse('$baseUrl/dashboard/summary/$symbol'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/dashboard/summary/$symbol'))
+        .timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       return DashboardSummaryModel.fromJson(json.decode(response.body));
     } else {
@@ -59,7 +63,7 @@ class ApiService {
     if (impact != null && impact.isNotEmpty) {
       url += '&impact=$impact';
     }
-    final response = await http.get(Uri.parse(url));
+    final response = await http.get(Uri.parse(url)).timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => EconomicEventModel.fromJson(e)).toList();
@@ -70,7 +74,9 @@ class ApiService {
 
   // 3. Upcoming High Impact Radar
   Future<List<EconomicEventModel>> getUpcomingHighImpact({int hours = 48}) async {
-    final response = await http.get(Uri.parse('$baseUrl/fundamental/upcoming-high-impact?hours_ahead=$hours'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/fundamental/upcoming-high-impact?hours_ahead=$hours'))
+        .timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => EconomicEventModel.fromJson(e)).toList();
@@ -85,7 +91,7 @@ class ApiService {
     if (sentiment != null && sentiment.isNotEmpty) {
       url += '&sentiment=$sentiment';
     }
-    final response = await http.get(Uri.parse(url));
+    final response = await http.get(Uri.parse(url)).timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => NewsArticleModel.fromJson(e)).toList();
@@ -96,9 +102,9 @@ class ApiService {
 
   // 5. Candlestick Chart Data
   Future<List<PriceCandleModel>> getCandles(String symbol, {String timeframe = '1h', int limit = 80}) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/technical/candles/$symbol?timeframe=$timeframe&limit=$limit'),
-    );
+    final response = await http
+        .get(Uri.parse('$baseUrl/technical/candles/$symbol?timeframe=$timeframe&limit=$limit'))
+        .timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => PriceCandleModel.fromJson(e)).toList();
@@ -109,9 +115,9 @@ class ApiService {
 
   // 6. Technical Indicators
   Future<TechnicalIndicatorsModel> getTechnicalIndicators(String symbol, {String timeframe = '1h'}) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/technical/indicators/$symbol?timeframe=$timeframe'),
-    );
+    final response = await http
+        .get(Uri.parse('$baseUrl/technical/indicators/$symbol?timeframe=$timeframe'))
+        .timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       return TechnicalIndicatorsModel.fromJson(json.decode(response.body));
     } else {
@@ -121,7 +127,9 @@ class ApiService {
 
   // 7. Latest AI Analysis Report
   Future<AnalysisReportModel> getLatestAnalysis({String symbol = 'XAUUSD'}) async {
-    final response = await http.get(Uri.parse('$baseUrl/analysis/latest/$symbol'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/analysis/latest/$symbol'))
+        .timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       return AnalysisReportModel.fromJson(json.decode(response.body));
     } else {
@@ -129,9 +137,11 @@ class ApiService {
     }
   }
 
-  // 8. Live Price Tick
+  // 8. Live Price Tick (Fast 4s timeout)
   Future<Map<String, dynamic>> getLivePriceTick({String symbol = 'XAUUSD'}) async {
-    final response = await http.get(Uri.parse('$baseUrl/technical/live-price/$symbol'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/technical/live-price/$symbol'))
+        .timeout(const Duration(seconds: 4));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
@@ -139,10 +149,11 @@ class ApiService {
     }
   }
 
-
-  // 8. Trigger Fresh AI Analysis Synthesis
+  // 9. Trigger Fresh AI Analysis Synthesis (Allow 25s for AI)
   Future<AnalysisReportModel> triggerFreshAnalysis({String symbol = 'XAUUSD'}) async {
-    final response = await http.post(Uri.parse('$baseUrl/analysis/generate/$symbol'));
+    final response = await http
+        .post(Uri.parse('$baseUrl/analysis/generate/$symbol'))
+        .timeout(const Duration(seconds: 25));
     if (response.statusCode == 200) {
       return AnalysisReportModel.fromJson(json.decode(response.body));
     } else {
@@ -150,9 +161,11 @@ class ApiService {
     }
   }
 
-  // 9. Trigger Full Real-time Live Market Sync
+  // 10. Trigger Full Real-time Live Market Sync
   Future<DashboardSummaryModel> triggerFullLiveSync({String symbol = 'XAUUSD'}) async {
-    final response = await http.post(Uri.parse('$baseUrl/dashboard/sync/$symbol'));
+    final response = await http
+        .post(Uri.parse('$baseUrl/dashboard/sync/$symbol'))
+        .timeout(const Duration(seconds: 20));
     if (response.statusCode == 200) {
       return DashboardSummaryModel.fromJson(json.decode(response.body));
     } else {
@@ -160,9 +173,11 @@ class ApiService {
     }
   }
 
-  // 10. Trigger Instant Breaking News Sync
+  // 11. Trigger Instant Breaking News Sync
   Future<List<NewsArticleModel>> syncNews({String symbol = 'XAUUSD'}) async {
-    final response = await http.post(Uri.parse('$baseUrl/geopolitical/news/sync?symbol=$symbol'));
+    final response = await http
+        .post(Uri.parse('$baseUrl/geopolitical/news/sync?symbol=$symbol'))
+        .timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => NewsArticleModel.fromJson(e)).toList();
@@ -171,9 +186,11 @@ class ApiService {
     }
   }
 
-  // 11. Trigger Instant Economic Calendar Sync
+  // 12. Trigger Instant Economic Calendar Sync
   Future<List<EconomicEventModel>> syncCalendar() async {
-    final response = await http.post(Uri.parse('$baseUrl/fundamental/calendar/sync'));
+    final response = await http
+        .post(Uri.parse('$baseUrl/fundamental/calendar/sync'))
+        .timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => EconomicEventModel.fromJson(e)).toList();
@@ -182,13 +199,13 @@ class ApiService {
     }
   }
 
-  // 12. News Intelligence & Scenario Planning (9-Step Institutional Model)
+  // 13. News Intelligence & Scenario Planning (9-Step Institutional Model)
   Future<NewsIntelligenceModel> getNewsIntelligence({String symbol = 'XAUUSD', String? eventTitle}) async {
     String url = '$baseUrl/news-intelligence/latest/$symbol';
     if (eventTitle != null && eventTitle.isNotEmpty) {
       url += '?event_title=${Uri.encodeComponent(eventTitle)}';
     }
-    final response = await http.get(Uri.parse(url));
+    final response = await http.get(Uri.parse(url)).timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       return NewsIntelligenceModel.fromJson(json.decode(response.body));
     } else {

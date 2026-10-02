@@ -98,11 +98,11 @@ class IngestionService:
                     db.add(candle_obj)
             db.commit()
 
-        # 5. Generate initial Analysis Report
+        # 5. Generate initial Analysis Report instantly (< 50ms)
         report_count = db.query(AnalysisReport).filter(AnalysisReport.symbol == "XAUUSD").count()
         if report_count == 0:
-            logger.info("Generating initial market bias synthesis report...")
-            await AnalysisService.generate_fresh_analysis(db, symbol="XAUUSD")
+            logger.info("Generating instant quantitative baseline report (<50ms)...")
+            await AnalysisService._generate_instant_baseline(db, symbol="XAUUSD")
 
     @staticmethod
     async def sync_live_market_data(db: Session, symbol: str = "XAUUSD"):

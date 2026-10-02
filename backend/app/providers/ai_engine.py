@@ -170,8 +170,6 @@ class AIAgentEngine:
         models = [
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
-            "claude-sonnet-5",
-            "claude-sonnet-4-6",
         ]
         last_error = None
         for model in models:
@@ -187,7 +185,7 @@ class AIAgentEngine:
                 ]
             }
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.post(url, json=body, headers=headers)
                     if resp.status_code == 200:
                         res_json = resp.json()
@@ -273,15 +271,13 @@ class AIAgentEngine:
             "HTTP-Referer": "https://xauusd-radar.app",
             "X-Title": "XAU/USD RADAR — Institutional Bias Engine",
         }
-        # Free model priority order: strongest first, lightest last as safety net
-        # List verified on 2026-10-01 from openrouter.ai/api/v1/models
+        # Free model priority order: fastest & highest reliability first
         free_models = [
-            "nvidia/nemotron-3-ultra-550b-a55b:free",  # 550B param — strongest available
-            "qwen/qwen3.8-27b:free",                   # Qwen 3.8 27B — solid reasoning
+            "qwen/qwen3.8-27b:free",                   # Qwen 3.8 27B — ultra fast & solid reasoning
+            "google/gemma-4-26b-a4b-it:free",          # Google Gemma 4 26B MoE — lightweight
             "google/gemma-4-31b-it:free",              # Google Gemma 4 31B
-            "google/gemma-4-26b-a4b-it:free",          # Google Gemma 4 26B MoE
             "nvidia/nemotron-3-super-120b-a12b:free",  # Nvidia Nemotron 120B
-            "nvidia/nemotron-3.5-lightning:free",       # Nvidia fast model
+            "nvidia/nemotron-3-ultra-550b-a55b:free",  # 550B param
         ]
         last_error: Any = None
         for model in free_models:
@@ -302,7 +298,7 @@ class AIAgentEngine:
                     "temperature": 0.2,
                     "response_format": {"type": "json_object"},
                 }
-                async with httpx.AsyncClient(timeout=45.0) as client:
+                async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.post(url, json=body, headers=headers)
                     if resp.status_code == 200:
                         res_json = resp.json()
