@@ -324,10 +324,9 @@ class _IosTabBar extends StatelessWidget {
               ),
             ),
           ),
-          padding: EdgeInsets.only(bottom: safeBottom, top: 4.0),
-          height: 49.0 + safeBottom + 4.0,
+          height: 50.0 + safeBottom,
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: List.generate(_tabs.length, (i) {
               final tab = _tabs[i];
               final selected = i == currentIndex;
@@ -335,6 +334,7 @@ class _IosTabBar extends StatelessWidget {
                 child: _IosTabItemWidget(
                   tab: tab,
                   selected: selected,
+                  safeBottom: safeBottom,
                   onTap: () => onTap(i),
                 ),
               );
@@ -356,9 +356,15 @@ class _TabItem {
 class _IosTabItemWidget extends StatefulWidget {
   final _TabItem tab;
   final bool selected;
+  final double safeBottom;
   final VoidCallback onTap;
 
-  const _IosTabItemWidget({required this.tab, required this.selected, required this.onTap});
+  const _IosTabItemWidget({
+    required this.tab,
+    required this.selected,
+    required this.safeBottom,
+    required this.onTap,
+  });
 
   @override
   State<_IosTabItemWidget> createState() => _IosTabItemWidgetState();
@@ -403,42 +409,46 @@ class _IosTabItemWidgetState extends State<_IosTabItemWidget>
 
     return GestureDetector(
       onTap: _handleTap,
-      behavior: HitTestBehavior.opaque,
-      child: ScaleTransition(
-        scale: _scale,
-        child: SizedBox(
-          height: 49.0,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                transitionBuilder: (child, anim) => ScaleTransition(
-                  scale: Tween<double>(begin: 0.75, end: 1.0).animate(
-                    CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+      behavior: HitTestBehavior.opaque, // Entire vertical space from top to bottom is tappable
+      child: Container(
+        color: Colors.transparent, // Ensures hit testing across full cell
+        padding: EdgeInsets.only(bottom: widget.safeBottom * 0.55, top: 4.0),
+        child: Center(
+          child: ScaleTransition(
+            scale: _scale,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  transitionBuilder: (child, anim) => ScaleTransition(
+                    scale: Tween<double>(begin: 0.75, end: 1.0).animate(
+                      CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+                    ),
+                    child: FadeTransition(opacity: anim, child: child),
                   ),
-                  child: FadeTransition(opacity: anim, child: child),
+                  child: Icon(
+                    selected ? widget.tab.filledIcon : widget.tab.outlineIcon,
+                    key: ValueKey(selected),
+                    size: 25.0,
+                    color: selected ? activeColor : inactiveColor,
+                  ),
                 ),
-                child: Icon(
-                  selected ? widget.tab.filledIcon : widget.tab.outlineIcon,
-                  key: ValueKey(selected),
-                  size: 25.0,
-                  color: selected ? activeColor : inactiveColor,
+                const SizedBox(height: 3),
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 180),
+                  style: TextStyle(
+                    fontSize: 10.0,
+                    height: 1.0,
+                    letterSpacing: -0.2,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    color: selected ? activeColor : inactiveColor,
+                  ),
+                  child: Text(widget.tab.label),
                 ),
-              ),
-              const SizedBox(height: 3),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 180),
-                style: TextStyle(
-                  fontSize: 10.0,
-                  height: 1.0,
-                  letterSpacing: -0.2,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  color: selected ? activeColor : inactiveColor,
-                ),
-                child: Text(widget.tab.label),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
