@@ -101,17 +101,26 @@ async def lifespan(app: FastAPI):
         db.close()
 
     # 3. Start continuous sub-second live price tick worker & background ingestion daemon
-    price_task = asyncio.create_task(_background_price_tick_loop())
-    ingestion_task = asyncio.create_task(_background_auto_ingestion_loop())
+    # (Only active in standalone ASGI/Uvicorn mode; disabled in synchronous WSGI/Passenger to avoid thread hangs)
+    is_wsgi = bool(os.environ.get("IS_WSGI") or os.environ.get("PASSENGER_APP_ENV"))
+    price_task = None
+    ingestion_task = None
+    if not is_wsgi:
+        price_task = asyncio.create_task(_background_price_tick_loop())
+        ingestion_task = asyncio.create_task(_background_auto_ingestion_loop())
 
     yield
 
-    price_task.cancel()
-    ingestion_task.cancel()
-    try:
-        await asyncio.gather(price_task, ingestion_task, return_exceptions=True)
-    except Exception:
-        pass
+    if price_task:
+        price_task.cancel()
+    if ingestion_task:
+        ingestion_task.cancel()
+    if price_task or ingestion_task:
+        try:
+            tasks = [t for t in (price_task, ingestion_task) if t]
+            await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception:
+            pass
     logger.info("Shutting down application...")
 
 

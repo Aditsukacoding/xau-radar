@@ -33,6 +33,19 @@ def create_backend_zip():
         if os.path.exists(wsgi_path):
             z.write(wsgi_path, "passenger_wsgi.py")
 
+        # Add bundled a2wsgi package so server never fails with ModuleNotFoundError
+        a2wsgi_dir = os.path.join(backend_dir, "a2wsgi")
+        if os.path.exists(a2wsgi_dir):
+            for root, dirs, files in os.walk(a2wsgi_dir):
+                if "__pycache__" in root:
+                    continue
+                for file in files:
+                    if file.endswith(".pyc"):
+                        continue
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, backend_dir)
+                    z.write(file_path, arcname)
+
         # Add production .env
         env_path = os.path.join(backend_dir, ".env")
         if os.path.exists(env_path):
