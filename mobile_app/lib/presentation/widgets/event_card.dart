@@ -235,7 +235,7 @@ class EventCard extends StatelessWidget {
             fontSize: (value.length > 8) ? 11 : 13,
             fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
             fontStyle: !isBold ? FontStyle.italic : FontStyle.normal,
-            fontFamily: isBold ? 'monospace' : null,
+            fontFamily: isBold ? 'JetBrainsMono' : null,
           ),
         ),
       ],

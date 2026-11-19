@@ -401,7 +401,7 @@ class NewsScenarioSheet extends StatelessWidget {
                                     style: const TextStyle(
                                       color: AppColors.primary,
                                       fontSize: 10,
-                                      fontFamily: 'monospace',
+                                      fontFamily: 'JetBrainsMono',
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -465,7 +465,7 @@ class NewsScenarioSheet extends StatelessWidget {
                 color: valueColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                fontFamily: 'monospace',
+                fontFamily: 'JetBrainsMono',
               ),
             ),
           ),

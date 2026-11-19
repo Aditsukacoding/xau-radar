@@ -14,7 +14,7 @@ class IosGlassCard extends StatefulWidget {
   const IosGlassCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(18),
     this.margin = EdgeInsets.zero,
     this.borderRadius = 20,
     this.glowColor,
@@ -35,10 +35,10 @@ class _IosGlassCardState extends State<IosGlassCard> with SingleTickerProviderSt
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 100),
+      duration: const Duration(milliseconds: 110),
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.98).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.985).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
     );
   }
 
@@ -57,38 +57,39 @@ class _IosGlassCardState extends State<IosGlassCard> with SingleTickerProviderSt
         boxShadow: [
           if (widget.glowColor != null)
             BoxShadow(
-              color: widget.glowColor!.withValues(alpha: 0.15),
-              blurRadius: 24,
-              spreadRadius: 2,
-              offset: const Offset(0, 4),
+              color: widget.glowColor!.withValues(alpha: 0.10),
+              blurRadius: 28,
+              spreadRadius: -2,
+              offset: const Offset(0, 6),
             )
           else
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
+              blurRadius: 20,
+              spreadRadius: -4,
+              offset: const Offset(0, 8),
             ),
         ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(widget.borderRadius),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
             padding: widget.padding,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0x35283042),
-                  const Color(0x18141824),
+                  Color(0xF5141822),
+                  Color(0xFA10131B),
                 ],
               ),
               borderRadius: BorderRadius.circular(widget.borderRadius),
               border: Border.all(
                 color: widget.borderColor ?? AppColors.border,
-                width: 0.8,
+                width: 0.85,
               ),
             ),
             child: widget.child,
@@ -99,6 +100,7 @@ class _IosGlassCardState extends State<IosGlassCard> with SingleTickerProviderSt
 
     if (widget.onTap != null) {
       return GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTapDown: (_) => _controller.forward(),
         onTapUp: (_) {
           _controller.reverse();

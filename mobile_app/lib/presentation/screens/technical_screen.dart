@@ -337,7 +337,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                                           color: AppColors.textPrimary,
                                           fontSize: 26,
                                           fontWeight: FontWeight.w800,
-                                          fontFamily: 'monospace',
+                                          fontFamily: 'JetBrainsMono',
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -381,7 +381,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                                             color: AppColors.primary,
                                             fontSize: 15,
                                             fontWeight: FontWeight.w800,
-                                            fontFamily: 'monospace',
+                                            fontFamily: 'JetBrainsMono',
                                           ),
                                         ),
                                       ),
@@ -458,7 +458,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                                                 padding: const EdgeInsets.only(bottom: 3),
                                                 child: Text(
                                                   '\$${s.toStringAsFixed(2)}',
-                                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.w700),
+                                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'JetBrainsMono', fontWeight: FontWeight.w700),
                                                 ),
                                               ))),
                                         ],
@@ -482,7 +482,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                                                 padding: const EdgeInsets.only(bottom: 3),
                                                 child: Text(
                                                   '\$${r.toStringAsFixed(2)}',
-                                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.w700),
+                                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'JetBrainsMono', fontWeight: FontWeight.w700),
                                                 ),
                                               ))),
                                         ],
@@ -508,7 +508,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
         Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
         Text(
           value,
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'monospace'),
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'JetBrainsMono'),
         ),
       ],
     );

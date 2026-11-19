@@ -233,7 +233,7 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                           fontSize: 24,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
-                          fontFamily: 'monospace',
+                          fontFamily: 'JetBrainsMono',
                         ),
                       ),
                     ),
@@ -271,7 +271,7 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                             const SizedBox(width: 8),
                             Text(
                               '24H H: ${computedHigh.toStringAsFixed(2)}  L: ${computedLow.toStringAsFixed(2)}',
-                              style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5, fontFamily: 'monospace'),
+                              style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5, fontFamily: 'JetBrainsMono'),
                             ),
                           ],
                         );
@@ -304,7 +304,7 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                     color: candleDiff >= 0 ? AppColors.bullish : AppColors.bearish,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    fontFamily: 'monospace',
+                    fontFamily: 'JetBrainsMono',
                   ),
                 ),
               ],
@@ -437,7 +437,7 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
             color: AppColors.textPrimary,
             fontSize: 10.5,
             fontWeight: FontWeight.w600,
-            fontFamily: 'monospace',
+            fontFamily: 'JetBrainsMono',
           ),
         ),
       ],
@@ -489,7 +489,7 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
           color: color,
           fontSize: 9,
           fontWeight: FontWeight.w800,
-          fontFamily: 'monospace',
+          fontFamily: 'JetBrainsMono',
         ),
       ),
     );
@@ -544,7 +544,7 @@ class _PureCandlePainter extends CustomPainter {
     final coordStyle = const TextStyle(
       color: AppColors.textMuted,
       fontSize: 9.5,
-      fontFamily: 'monospace',
+      fontFamily: 'JetBrainsMono',
     );
 
     const int gridLines = 4;
@@ -675,7 +675,7 @@ class _PureCandlePainter extends CustomPainter {
         color: Colors.black,
         fontSize: 9.5,
         fontWeight: FontWeight.w900,
-        fontFamily: 'monospace',
+        fontFamily: 'JetBrainsMono',
       ),
     );
     final livePricePainter = TextPainter(text: livePriceText, textDirection: ui.TextDirection.ltr)..layout();
@@ -759,7 +759,7 @@ class _PureCandlePainter extends CustomPainter {
         color: Colors.black,
         fontSize: 8.5,
         fontWeight: FontWeight.w900,
-        fontFamily: 'monospace',
+        fontFamily: 'JetBrainsMono',
       ),
     );
     final painter = TextPainter(text: textSpan, textDirection: ui.TextDirection.ltr)..layout();

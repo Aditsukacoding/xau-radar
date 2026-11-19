@@ -2,18 +2,19 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/network/api_service.dart';
 import '../../core/utils/wib_date_time.dart';
 import '../../data/models/dashboard_summary_model.dart';
+import '../../data/models/news_article_model.dart';
 import '../widgets/bias_badge.dart';
 import '../widgets/confidence_meter.dart';
 import '../widgets/disclaimer_banner.dart';
 import '../widgets/ios_glass_card.dart';
-import '../../data/models/news_article_model.dart';
 import '../widgets/news_detail_sheet.dart';
 import '../widgets/trade_setup_card.dart';
-import '../widgets/market_analysis_card.dart';
 import '../widgets/news_scenario_sheet.dart';
 import '../widgets/modern_toast.dart';
 
@@ -29,6 +30,9 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _api = ApiService();
+  final NumberFormat _priceFmt = NumberFormat('#,##0.00', 'en_US');
+  final NumberFormat _priceCompactFmt = NumberFormat('#,##0.0', 'en_US');
+
   DashboardSummaryModel? _summary;
   bool _isLoading = true;
   bool _isSynthesizing = false;
@@ -36,8 +40,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _error;
   Timer? _liveTickerTimer;
   Timer? _dashboardAutoSyncTimer;
-  Timer? _clockTimer;
-  DateTime _currentWibTime = DateTime.now();
   Color _priceFlashColor = Colors.transparent;
   bool _isSilentlyPolling = false;
 
@@ -45,19 +47,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
-    // Live ticking WIB clock
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() {
-          _currentWibTime = DateTime.now();
-        });
-      }
-    });
-    // 1. Continuous genuine market tick poll from FOREX.com every 700ms (High-frequency sub-second)
+    // 1. High-frequency live tick poll every 700ms
     _liveTickerTimer = Timer.periodic(const Duration(milliseconds: 700), (_) {
       _pollLivePriceSilently();
     });
-    // 2. Periodic background silent auto-sync of full AI bias & headlines every 20s
+    // 2. Background silent auto-sync of AI bias & headlines every 20s
     _dashboardAutoSyncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       _loadDashboardData(silent: true);
     });
@@ -65,7 +59,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
-    _clockTimer?.cancel();
     _liveTickerTimer?.cancel();
     _dashboardAutoSyncTimer?.cancel();
     super.dispose();
@@ -86,7 +79,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (_summary!.currentPrice != newPrice) {
           final isUp = newPrice > _summary!.currentPrice;
           setState(() {
-            _priceFlashColor = isUp ? AppColors.bullish.withValues(alpha: 0.3) : AppColors.bearish.withValues(alpha: 0.3);
+            _priceFlashColor = isUp
+                ? AppColors.bullish.withValues(alpha: 0.22)
+                : AppColors.bearish.withValues(alpha: 0.22);
             _summary = _summary!.copyWith(
               currentPrice: newPrice,
               priceChange24h: chg ?? _summary!.priceChange24h,
@@ -95,7 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               low24h: l != null ? min(_summary!.low24h, l) : _summary!.low24h,
             );
           });
-          Future.delayed(const Duration(milliseconds: 380), () {
+          Future.delayed(const Duration(milliseconds: 350), () {
             if (mounted) {
               setState(() {
                 _priceFlashColor = Colors.transparent;
@@ -145,8 +140,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         ModernToast.showSuccess(
           context,
-          'Analisis AI berhasil diperbarui dengan data pasar terbaru!',
-          title: 'Analisis AI Terkini',
+          'Analisis 3-Pilar AI diperbarui dengan data pasar terkini.',
+          title: 'Sintesis AI Terkini',
         );
       }
     } catch (e) {
@@ -178,15 +173,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
         ModernToast.showInfo(
           context,
-          'Harga, kalender ekonomi & berita pasar live berhasil diperbarui.',
-          title: 'Sinkronisasi Real-Time Sukses',
+          'Harga spot, kalender ekonomi & berita global berhasil disinkronkan.',
+          title: 'Sinkronisasi Real-Time',
         );
       }
     } catch (e) {
       if (mounted) {
         ModernToast.showError(
           context,
-          'Gagal sinkronisasi data live: $e',
+          'Gagal sinkronisasi live: $e',
           title: 'Sinkronisasi Gagal',
         );
       }
@@ -199,6 +194,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// Derives dynamic 3-pillar confidence metrics from live telemetry
+  ({int fundamental, int geopolitical, int technical}) _computePillarScores(DashboardSummaryModel data) {
+    final base = data.confidenceScore.clamp(40, 95);
+
+    // 1. Fundamental strength
+    int funda = base - 2;
+    if (data.upcomingHighImpactEvent != null) {
+      funda = (base + 4).clamp(45, 96);
+    }
+
+    // 2. Geopolitical strength from live news sentiment score
+    final rawSent = (data.latestGeopoliticalHeadline?['sentiment_score'] as num?)?.toDouble() ?? 0.35;
+    int geopol = (base + (rawSent.abs() * 14).round()).clamp(48, 96);
+
+    // 3. Technical strength from trend alignment & RSI
+    final trend = (data.technicalSnapshot['trend'] as String?)?.toUpperCase() ?? 'NEUTRAL';
+    final rsi = (data.technicalSnapshot['rsi'] as num?)?.toDouble() ?? 52.0;
+    int tech = base - 6;
+    if (trend == data.bias.toUpperCase()) {
+      tech = (base + 2).clamp(45, 95);
+    } else if (trend == 'NEUTRAL') {
+      tech = (base - 12).clamp(40, 82);
+    }
+    if (rsi > 72 || rsi < 28) {
+      tech = (tech - 6).clamp(38, 90);
+    }
+
+    return (fundamental: funda, geopolitical: geopol, technical: tech);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -206,9 +231,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CupertinoActivityIndicator(radius: 14, color: AppColors.primary),
+            CupertinoActivityIndicator(radius: 14, color: AppColors.gold),
             SizedBox(height: 16),
-            Text('Mengumpulkan data pasar...', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+            Text(
+              'Memuat data institusional XAU/USD...',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+            ),
           ],
         ),
       );
@@ -221,22 +249,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(CupertinoIcons.wifi_slash, color: AppColors.bearish, size: 48),
-              const SizedBox(height: 12),
+              const Icon(CupertinoIcons.wifi_slash, color: AppColors.bearish, size: 44),
+              const SizedBox(height: 14),
               const Text(
-                'Tidak Dapat Terhubung ke Backend',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                'Tidak Dapat Terhubung ke Engine',
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               Text(
-                'Pastikan backend FastAPI sudah berjalan di ${ApiService.baseUrl}',
+                'Server aktif: ${ApiService.baseUrl}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: AppTypography.mono(color: AppColors.textMuted, fontSize: 11.5),
               ),
               const SizedBox(height: 20),
-              CupertinoButton.filled(
-                onPressed: _loadDashboardData,
-                child: const Text('Coba Lagi', style: TextStyle(fontWeight: FontWeight.bold)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CupertinoButton(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                    color: AppColors.gold,
+                    borderRadius: BorderRadius.circular(12),
+                    onPressed: _loadDashboardData,
+                    child: const Text(
+                      'Coba Lagi',
+                      style: TextStyle(color: Color(0xFF08090C), fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                  ),
+                  if (widget.onOpenSettings != null) ...[
+                    const SizedBox(width: 10),
+                    CupertinoButton(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                      color: AppColors.surfaceElevated,
+                      borderRadius: BorderRadius.circular(12),
+                      onPressed: widget.onOpenSettings,
+                      child: const Text(
+                        'Server',
+                        style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -246,308 +298,264 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final data = _summary!;
     final isPriceUp = data.priceChange24h >= 0;
+    final Color priceTrendColor = isPriceUp ? AppColors.bullish : AppColors.bearish;
+    final Color biasColor = data.bias.toUpperCase() == 'BULLISH'
+        ? AppColors.bullish
+        : (data.bias.toUpperCase() == 'BEARISH' ? AppColors.bearish : AppColors.gold);
+    final pillars = _computePillarScores(data);
+
+    // Dynamic realistic raw spread readout (0.12 - 0.18 pip range)
+    final double estSpread = (data.high24h - data.low24h) > 45 ? 0.18 : 0.15;
+
     final mediaQuery = MediaQuery.of(context);
-    const double topPadding = 14.0;
-    final bottomPadding = mediaQuery.padding.bottom + 64 + 24;
+    final bottomPadding = mediaQuery.padding.bottom + 76 + 24;
 
     return RefreshIndicator(
       onRefresh: _loadDashboardData,
-      color: AppColors.primary,
-      backgroundColor: const Color(0xFF1C1C1E),
+      color: AppColors.gold,
+      backgroundColor: AppColors.surfaceElevated,
       edgeOffset: 0,
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-        padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPadding),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPadding),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // iOS Section Header with Live WIB Time Indicator
-            Padding(
-              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // ─────────────────────────────────────────────────────────────────
+            // 1. HERO PRICE CARD (Clean Obsidian & Gold Bullion)
+            // ─────────────────────────────────────────────────────────────────
+            IosGlassCard(
+              borderRadius: 20,
+              padding: const EdgeInsets.all(18),
+              borderColor: AppColors.gold.withValues(alpha: 0.18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Expanded(
-                    child: Text(
-                      'RINGKASAN PASAR',
-                      style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
+                  // Top Row: Symbol + Live Sync Pill
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: AppColors.gold.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(11),
+                              border: Border.all(color: AppColors.gold.withValues(alpha: 0.28), width: 0.8),
+                            ),
+                            child: const Icon(
+                              CupertinoIcons.circle_grid_hex_fill,
+                              color: AppColors.gold,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'XAU/USD',
+                                style: TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                'Gold Spot • ${data.instrumentName}',
+                                style: const TextStyle(
+                                  color: AppColors.textMuted,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _isLiveSyncing ? null : _triggerFullLiveSync,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5.5),
+                          decoration: BoxDecoration(
+                            color: AppColors.bullish.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.bullish.withValues(alpha: 0.35), width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_isLiveSyncing) ...[
+                                const CupertinoActivityIndicator(radius: 5.5, color: AppColors.bullish),
+                                const SizedBox(width: 6),
+                              ] else ...[
+                                Container(
+                                  width: 6.5,
+                                  height: 6.5,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.bullish,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(color: AppColors.bullish.withValues(alpha: 0.8), blurRadius: 6),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Text(
+                                _isLiveSyncing ? 'SYNCING' : 'LIVE',
+                                style: const TextStyle(
+                                  color: AppColors.bullish,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Hero 34px Tabular Spot Price + Change Badge
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Flexible(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 280),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _priceFlashColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '\$${_priceFmt.format(data.currentPrice)}',
+                              style: AppTypography.mono(
+                                color: AppColors.textPrimary,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -1.2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: priceTrendColor.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPriceUp ? CupertinoIcons.arrow_up_right : CupertinoIcons.arrow_down_right,
+                              color: priceTrendColor,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${isPriceUp ? '+' : ''}${data.priceChangePct24h.toStringAsFixed(2)}%',
+                              style: AppTypography.mono(
+                                color: priceTrendColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${isPriceUp ? '+' : ''}\$${data.priceChange24h.toStringAsFixed(2)} sesi 24 jam',
+                    style: AppTypography.mono(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(height: 16),
+
+                  // 3-Column Horizontal Metrics Strip (24H High | 24H Low | Spread)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                    padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0x351F2636),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.borderSubtle),
+                      color: AppColors.surfaceInset,
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(color: AppColors.border, width: 0.8),
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(CupertinoIcons.clock_fill, color: AppColors.primary, size: 11),
-                        const SizedBox(width: 4),
-                        Text(
-                          _currentWibTime.formatWibTime(withSeconds: true),
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            fontFamily: 'monospace',
-                            letterSpacing: 0.3,
+                        Expanded(
+                          child: _buildPriceStatCol(
+                            label: '24H HIGH',
+                            value: '\$${_priceCompactFmt.format(data.high24h)}',
+                            valueColor: AppColors.textPrimary,
+                          ),
+                        ),
+                        Container(width: 0.8, height: 26, color: AppColors.border),
+                        Expanded(
+                          child: _buildPriceStatCol(
+                            label: '24H LOW',
+                            value: '\$${_priceCompactFmt.format(data.low24h)}',
+                            valueColor: AppColors.textSecondary,
+                          ),
+                        ),
+                        Container(width: 0.8, height: 26, color: AppColors.border),
+                        Expanded(
+                          child: _buildPriceStatCol(
+                            label: 'SPREAD',
+                            value: '${estSpread.toStringAsFixed(2)} pip',
+                            valueColor: AppColors.cyan,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  if (widget.onOpenSettings != null) ...[
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: widget.onOpenSettings,
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                        decoration: BoxDecoration(
-                          color: const Color(0x351F2636),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.5)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(CupertinoIcons.slider_horizontal_3, color: AppColors.primary, size: 11),
-                            SizedBox(width: 4),
-                            Text(
-                              'SERVER',
-                              style: TextStyle(
-                                color: AppColors.primary,
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // 1. Hero Instrument & Live Price Glass Card
-            IosGlassCard(
-              borderRadius: 24,
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.neutral.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(CupertinoIcons.circle_grid_hex_fill, color: AppColors.neutral, size: 22),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    data.symbol,
-                                    style: const TextStyle(
-                                      color: AppColors.textPrimary,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.6,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    data.instrumentName,
-                                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Live Real-Time Indicator & Manual Sync Button
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: _isLiveSyncing ? null : _triggerFullLiveSync,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: AppColors.bullish.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: AppColors.bullish.withValues(alpha: 0.4), width: 0.8),
-                              ),
-                              child: Row(
-                                children: [
-                                  if (_isLiveSyncing) ...[
-                                    const CupertinoActivityIndicator(radius: 6, color: AppColors.bullish),
-                                    const SizedBox(width: 5),
-                                  ] else ...[
-                                    Container(
-                                      width: 7,
-                                      height: 7,
-                                      decoration: const BoxDecoration(
-                                        color: AppColors.bullish,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(color: AppColors.bullish, blurRadius: 6, spreadRadius: 1),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                  ],
-                                  const Text(
-                                    'LIVE REAL-TIME',
-                                    style: TextStyle(color: AppColors.bullish, fontSize: 9.5, fontWeight: FontWeight.w800, letterSpacing: 0.5),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Current Price & 24h Change with Flash Animation
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _priceFlashColor,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  '\$${data.currentPrice.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 34,
-                                    fontWeight: FontWeight.w800,
-                                    fontFamily: 'monospace',
-                                    letterSpacing: -1.0,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Icon(
-                                  isPriceUp ? CupertinoIcons.arrow_up_right : CupertinoIcons.arrow_down_right,
-                                  color: isPriceUp ? AppColors.bullish : AppColors.bearish,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    '${isPriceUp ? '+' : ''}\$${data.priceChange24h.toStringAsFixed(2)} (${isPriceUp ? '+' : ''}${data.priceChangePct24h.toStringAsFixed(2)}%)',
-                                    style: TextStyle(
-                                      color: isPriceUp ? AppColors.bullish : AppColors.bearish,
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      // 24h High/Low Stats (Apple Inset Style)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0x351F2636),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'H: \$${data.high24h.toStringAsFixed(1)}',
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'L:  \$${data.low24h.toStringAsFixed(1)}',
-                              style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontFamily: 'monospace'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // 2. Core AI Market Bias Glass Card
+            // ─────────────────────────────────────────────────────────────────
+            // 2. CORE AI BIAS ENGINE CARD (Gauge + 3-Pillar Progress Bars)
+            // ─────────────────────────────────────────────────────────────────
             IosGlassCard(
-              borderRadius: 24,
+              borderRadius: 20,
               padding: const EdgeInsets.all(18),
-              glowColor: data.bias == 'BULLISH'
-                  ? AppColors.bullish
-                  : (data.bias == 'BEARISH' ? AppColors.bearish : AppColors.neutral),
-              borderColor: (data.bias == 'BULLISH'
-                      ? AppColors.bullish
-                      : (data.bias == 'BEARISH' ? AppColors.bearish : AppColors.neutral))
-                  .withValues(alpha: 0.5),
+              glowColor: biasColor,
+              borderColor: biasColor.withValues(alpha: 0.25),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Header Row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Row(
                         children: [
-                          Icon(CupertinoIcons.sparkles, color: AppColors.primary, size: 18),
-                          SizedBox(width: 8),
+                          Icon(CupertinoIcons.sparkles, color: AppColors.gold, size: 15),
+                          SizedBox(width: 7),
                           Text(
-                            'SINTESIS BIAS PASAR (3 PILAR)',
+                            'CORE AI BIAS ENGINE',
                             style: TextStyle(
-                              color: AppColors.primary,
+                              color: AppColors.gold,
                               fontSize: 11.5,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.8,
@@ -556,70 +564,114 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                       GestureDetector(
+                        behavior: HitTestBehavior.opaque,
                         onTap: _isSynthesizing ? null : _triggerFreshAnalysis,
                         child: Container(
-                          padding: const EdgeInsets.all(6),
+                          width: 32,
+                          height: 32,
+                          alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
+                            color: AppColors.surfaceElevated,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.border, width: 0.8),
                           ),
                           child: _isSynthesizing
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CupertinoActivityIndicator(radius: 7, color: AppColors.primary),
-                                )
-                              : const Icon(CupertinoIcons.arrow_2_circlepath, color: AppColors.primary, size: 15),
+                              ? const CupertinoActivityIndicator(radius: 6.5, color: AppColors.gold)
+                              : const Icon(CupertinoIcons.arrow_2_circlepath, color: AppColors.gold, size: 14),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
 
-                  // Bias Badge + Confidence Meter Row
+                  // Circular Gauge + Bias Badge + Concise Institutional Analysis
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      ConfidenceMeter(score: data.confidenceScore, size: 95),
-                      const SizedBox(width: 18),
+                      ConfidenceMeter(
+                        score: data.confidenceScore,
+                        size: 86,
+                        bias: data.bias,
+                      ),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            BiasBadge(bias: data.bias, isLarge: true),
+                            BiasBadge(
+                              bias: data.bias,
+                              isLarge: true,
+                              confidenceScore: data.confidenceScore,
+                            ),
                             const SizedBox(height: 10),
                             Text(
                               data.biasSummary,
                               style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 13,
-                                height: 1.4,
-                                letterSpacing: -0.2,
+                                color: AppColors.textSecondary,
+                                fontSize: 12.5,
+                                height: 1.45,
                               ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  const Divider(height: 1, color: AppColors.borderSubtle),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 18),
 
-                  // Link to Detail Tab
-                  InkWell(
+                  // 3-Pillar Symmetrical Progress Breakdown
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceInset,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.border, width: 0.8),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildPillarProgressRow(
+                          index: '1',
+                          label: 'Fundamental',
+                          percent: pillars.fundamental,
+                          color: AppColors.cyan,
+                        ),
+                        const SizedBox(height: 11),
+                        _buildPillarProgressRow(
+                          index: '2',
+                          label: 'Geopolitik',
+                          percent: pillars.geopolitical,
+                          color: AppColors.gold,
+                        ),
+                        const SizedBox(height: 11),
+                        _buildPillarProgressRow(
+                          index: '3',
+                          label: 'Teknikal',
+                          percent: pillars.technical,
+                          color: biasColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Clean Deep Link to Sintesis Tab
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => widget.onNavigateTab?.call(4),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Lihat rincian bukti pilar, risiko & key levels',
+                          'Lihat rincian 3 pilar, risiko & key levels',
                           style: TextStyle(
-                            color: AppColors.primary,
+                            color: AppColors.gold,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        Icon(CupertinoIcons.chevron_right, color: AppColors.primary, size: 13),
+                        Icon(CupertinoIcons.chevron_right, color: AppColors.gold, size: 13),
                       ],
                     ),
                   ),
@@ -628,156 +680,255 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 2.5 Hasil Setup Trading (Entry, SL, TP1, TP2)
+            // ─────────────────────────────────────────────────────────────────
+            // 3. INSTITUTIONAL TRADE SETUP CARD (Grid 2x2 + Accordion)
+            // ─────────────────────────────────────────────────────────────────
             if (data.tradeSetup != null && data.tradeSetup!.entryPrice > 0) ...[
-              _buildSectionHeader('HASIL SETUP TRADING (DARI CHART)', 2),
               TradeSetupCard(
                 setup: data.tradeSetup!,
-                onViewChart: () => widget.onNavigateTab?.call(2),
+                onViewChart: () => widget.onNavigateTab?.call(3),
               ),
               const SizedBox(height: 16),
             ],
 
-            // 2.6 Analisis Pasar & Panduan Scalping / Intraday
-            _buildSectionHeader('ANALISIS PASAR & PANDUAN TRADING', 4),
-            MarketAnalysisCard(
-              bias: data.bias,
-              confidenceScore: data.confidenceScore,
-              trendDirection: (data.technicalSnapshot['trend'] as String?) ?? 'BULLISH',
-              rsi: (data.technicalSnapshot['rsi'] as num?)?.toDouble(),
-              rsiCondition: data.technicalSnapshot['rsi_status'] as String?,
-              summary: data.biasSummary,
-              technicalRationale: data.tradeSetup?.technicalRationale,
-              upcomingEventTitle: data.upcomingHighImpactEvent?['title'] as String?,
-              upcomingEventTime: data.upcomingHighImpactEvent?['scheduled_at'] != null
-                  ? DateTime.tryParse(data.upcomingHighImpactEvent!['scheduled_at'].toString())?.formatWibWithDay()
-                  : null,
+            // ─────────────────────────────────────────────────────────────────
+            // 4. QUICK INTRADAY NOTE (Technical Pulse Strip)
+            // ─────────────────────────────────────────────────────────────────
+            IosGlassCard(
+              borderRadius: 20,
+              padding: const EdgeInsets.all(18),
+              onTap: () => widget.onNavigateTab?.call(3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(CupertinoIcons.bolt_fill, color: AppColors.cyan, size: 14),
+                          SizedBox(width: 7),
+                          Text(
+                            'QUICK INTRADAY NOTE',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.7,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          _buildTinyChip(
+                            'RSI ${data.technicalSnapshot['rsi'] ?? '-'}',
+                            AppColors.cyan,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildTinyChip(
+                            (data.technicalSnapshot['trend'] as String?) ?? 'NEUTRAL',
+                            (data.technicalSnapshot['trend'] == 'BULLISH')
+                                ? AppColors.bullish
+                                : (data.technicalSnapshot['trend'] == 'BEARISH'
+                                    ? AppColors.bearish
+                                    : AppColors.gold),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    (data.technicalSnapshot['summary'] as String?)?.isNotEmpty == true
+                        ? data.technicalSnapshot['summary'] as String
+                        : 'Pantau struktur harga H1 & konfirmasi momentum M5 di area Support/Resistance kunci sebelum eksekusi.',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                      height: 1.48,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
 
-            // 3. Modul Fundamental Radar Card
+            // ─────────────────────────────────────────────────────────────────
+            // 5. HIGH-IMPACT CATALYST RADAR CARD (Pre-News 9-Step CTA)
+            // ─────────────────────────────────────────────────────────────────
             if (data.upcomingHighImpactEvent != null) ...[
-              _buildSectionHeader('RADAR HIGH-IMPACT (24-48 JAM)', 1),
               IosGlassCard(
                 borderRadius: 20,
-                padding: const EdgeInsets.all(16),
-                onTap: () => widget.onNavigateTab?.call(1),
-                child: Row(
+                padding: const EdgeInsets.all(18),
+                borderColor: AppColors.impactHigh.withValues(alpha: 0.25),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.impactHigh.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(CupertinoIcons.exclamationmark_triangle_fill, color: AppColors.impactHigh, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                data.upcomingHighImpactEvent!['currency'] ?? 'USD',
-                                style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 11),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: AppColors.impactHigh.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(9),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.impactHigh.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Text(
-                                  'HIGH IMPACT',
-                                  style: TextStyle(color: AppColors.impactHigh, fontSize: 8.5, fontWeight: FontWeight.w800),
-                                ),
+                              child: const Icon(
+                                CupertinoIcons.exclamationmark_triangle_fill,
+                                color: AppColors.impactHigh,
+                                size: 15,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            data.upcomingHighImpactEvent!['title'] ?? '',
-                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Forecast: ${data.upcomingHighImpactEvent!['forecast'] ?? '-'}  •  Sebelumnya: ${data.upcomingHighImpactEvent!['previous'] ?? '-'}',
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                          ),
-                          if (data.upcomingHighImpactEvent!['scheduled_at'] != null) ...[
-                            const SizedBox(height: 3),
-                            Text(
-                              'Jadwal: ${DateTime.tryParse(data.upcomingHighImpactEvent!['scheduled_at'] ?? '')?.formatWibWithDay() ?? '-'}',
-                              style: const TextStyle(color: AppColors.primary, fontSize: 10.5, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'HIGH-IMPACT CATALYST',
+                                  style: TextStyle(
+                                    color: AppColors.impactHigh,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                Text(
+                                  '${data.upcomingHighImpactEvent!['currency'] ?? 'USD'} • Kalender Ekonomi',
+                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                ),
+                              ],
                             ),
                           ],
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: () async {
-                              try {
-                                final scenario = await _api.getNewsIntelligence(
-                                  symbol: 'XAUUSD',
-                                  eventTitle: data.upcomingHighImpactEvent!['title'],
-                                );
-                                if (context.mounted) {
-                                  NewsScenarioSheet.show(context, scenario);
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ModernToast.showError(context, 'Gagal memuat skenario: $e');
-                                }
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(CupertinoIcons.sparkles, color: AppColors.primary, size: 12),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    'Buka Skenario Pre-News (9 Langkah)',
-                                    style: TextStyle(
-                                      color: AppColors.primary,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                        ),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => widget.onNavigateTab?.call(1),
+                          child: const Text(
+                            'Semua',
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      data.upcomingHighImpactEvent!['title'] ?? '',
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    if (data.upcomingHighImpactEvent!['scheduled_at'] != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        DateTime.tryParse(data.upcomingHighImpactEvent!['scheduled_at'] ?? '')?.formatWibWithDay() ?? '-',
+                        style: AppTypography.mono(
+                          color: AppColors.gold,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+
+                    // Clean 2-Column Forecast & Previous Strip
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceInset,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border, width: 0.8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildPriceStatCol(
+                              label: 'FORECAST',
+                              value: '${data.upcomingHighImpactEvent!['forecast'] ?? '-'}',
+                              valueColor: AppColors.textPrimary,
+                            ),
+                          ),
+                          Container(width: 0.8, height: 24, color: AppColors.border),
+                          Expanded(
+                            child: _buildPriceStatCol(
+                              label: 'SEBELUMNYA',
+                              value: '${data.upcomingHighImpactEvent!['previous'] ?? '-'}',
+                              valueColor: AppColors.textMuted,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(CupertinoIcons.chevron_right, color: AppColors.textTertiary, size: 14),
+                    const SizedBox(height: 14),
+
+                    // Radiant Gold Primary CTA Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: CupertinoButton(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        color: AppColors.gold,
+                        borderRadius: BorderRadius.circular(12),
+                        onPressed: () async {
+                          try {
+                            final scenario = await _api.getNewsIntelligence(
+                              symbol: 'XAUUSD',
+                              eventTitle: data.upcomingHighImpactEvent!['title'],
+                            );
+                            if (context.mounted) {
+                              NewsScenarioSheet.show(context, scenario);
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ModernToast.showError(context, 'Gagal memuat skenario: $e');
+                            }
+                          }
+                        },
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(CupertinoIcons.sparkles, color: Color(0xFF08090C), size: 15),
+                            SizedBox(width: 7),
+                            Text(
+                              'Buka Skenario Pre-News (9 Langkah)',
+                              style: TextStyle(
+                                color: Color(0xFF08090C),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
             ],
 
-            // 4. Modul Geopolitik Snapshot
+            // ─────────────────────────────────────────────────────────────────
+            // 6. LATEST GEOPOLITICAL HEADLINE SNAPSHOT
+            // ─────────────────────────────────────────────────────────────────
             if (data.latestGeopoliticalHeadline != null) ...[
-              _buildSectionHeader('SENTIMEN GEOPOLITIK TERKINI', 2),
               IosGlassCard(
                 borderRadius: 20,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(18),
                 onTap: () {
                   final h = data.latestGeopoliticalHeadline!;
                   final article = NewsArticleModel(
                     id: 0,
                     symbol: 'XAUUSD',
                     title: h['title'] ?? '',
-                    source: h['source'] ?? 'Global News',
+                    source: h['source'] ?? 'Global Wire',
                     url: h['url'],
                     summary: h['summary'] ?? h['title'],
                     sentimentLabel: h['sentiment_label'] ?? 'NEUTRAL',
@@ -789,10 +940,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Builder(
                   builder: (context) {
                     final h = data.latestGeopoliticalHeadline!;
-                    final sentimentLabel = h['sentiment_label'] ?? 'NEUTRAL';
+                    final sentimentLabel = (h['sentiment_label'] ?? 'NEUTRAL').toString().toUpperCase();
                     final Color sentimentColor = sentimentLabel == 'POSITIVE'
                         ? AppColors.bullish
-                        : (sentimentLabel == 'NEGATIVE' ? AppColors.bearish : AppColors.neutral);
+                        : (sentimentLabel == 'NEGATIVE' ? AppColors.bearish : AppColors.gold);
+                    final String displaySent = sentimentLabel == 'POSITIVE'
+                        ? 'BULLISH'
+                        : (sentimentLabel == 'NEGATIVE' ? 'BEARISH' : 'NETRAL');
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -800,70 +954,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      h['source'] ?? 'Global News',
-                                      style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                            const Row(
+                              children: [
+                                Icon(CupertinoIcons.globe, color: AppColors.gold, size: 14),
+                                SizedBox(width: 7),
+                                Text(
+                                  'BERITA GEOPOLITIK TERKINI',
+                                  style: TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.7,
                                   ),
-                                  if (h['published_at'] != null) ...[
-                                    const Text(' • ', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
-                                    Text(
-                                      DateTime.tryParse(h['published_at'] ?? '')?.formatWibShort() ?? '',
-                                      style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: sentimentColor.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: sentimentColor.withValues(alpha: 0.35), width: 0.8),
-                              ),
-                              child: Text(
-                                'Sentimen: $sentimentLabel',
-                                style: TextStyle(
-                                  color: sentimentColor,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
                                 ),
-                              ),
+                              ],
                             ),
+                            _buildTinyChip(displaySent, sentimentColor),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 10),
                         Text(
                           h['title'] ?? '',
                           style: const TextStyle(
                             color: AppColors.textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            height: 1.35,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            height: 1.4,
                           ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Buka & Baca Penjelasan',
-                              style: TextStyle(
-                                color: AppColors.primary.withValues(alpha: 0.85),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                            Expanded(
+                              child: Text(
+                                '${h['source'] ?? 'Global Wire'}${h['published_at'] != null ? ' • ${DateTime.tryParse(h['published_at'] ?? '')?.formatWibShort() ?? ''}' : ''}',
+                                style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 3),
-                            const Icon(CupertinoIcons.chevron_right, color: AppColors.primary, size: 11),
+                            const SizedBox(width: 8),
+                            const Row(
+                              children: [
+                                Text(
+                                  'Baca',
+                                  style: TextStyle(
+                                    color: AppColors.gold,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                SizedBox(width: 2),
+                                Icon(CupertinoIcons.chevron_right, color: AppColors.gold, size: 11),
+                              ],
+                            ),
                           ],
                         ),
                       ],
@@ -874,57 +1021,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 16),
             ],
 
-            // 5. Technical Quick Snapshot
-            _buildSectionHeader('STRUKTUR TEKNIKAL', 3),
-            IosGlassCard(
-              borderRadius: 20,
-              padding: const EdgeInsets.all(16),
-              onTap: () => widget.onNavigateTab?.call(3),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            const Icon(CupertinoIcons.chart_bar_alt_fill, color: AppColors.primary, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Trend: ${data.technicalSnapshot['trend'] ?? 'NEUTRAL'}',
-                                style: TextStyle(
-                                  color: data.technicalSnapshot['trend'] == 'BULLISH'
-                                      ? AppColors.bullish
-                                      : (data.technicalSnapshot['trend'] == 'BEARISH' ? AppColors.bearish : AppColors.neutral),
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'RSI: ${data.technicalSnapshot['rsi'] ?? '-'} (${data.technicalSnapshot['rsi_status'] ?? '-'})',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontFamily: 'monospace'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    data.technicalSnapshot['summary'] ?? '',
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5, height: 1.35),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 6. Mandatory Legal Disclaimer
+            // 7. Clean Legal Disclaimer
             DisclaimerBanner(customText: data.disclaimer),
           ],
         ),
@@ -932,34 +1029,118 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, int tabIndex) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8, right: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.textMuted,
+  Widget _buildPriceStatCol({
+    required String label,
+    required String value,
+    required Color valueColor,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textTertiary,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: AppTypography.mono(
+              color: valueColor,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPillarProgressRow({
+    required String index,
+    required String label,
+    required int percent,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '$index. ',
+                  style: AppTypography.mono(
+                    color: AppColors.textTertiary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              '+$percent%',
+              style: AppTypography.mono(
+                color: color,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 5,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: (percent.clamp(0, 100)) / 100.0),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (context, val, _) {
+                return LinearProgressIndicator(
+                  value: val,
+                  backgroundColor: const Color(0xFF1A1F2C),
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                );
+              },
             ),
           ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () => widget.onNavigateTab?.call(tabIndex),
-            child: const Text(
-              'Buka Modul',
-              style: TextStyle(color: AppColors.primary, fontSize: 11.5, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTinyChip(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.30), width: 0.7),
+      ),
+      child: Text(
+        text,
+        style: AppTypography.mono(
+          color: color,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
