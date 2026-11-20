@@ -260,23 +260,54 @@ class AnalysisService:
             should_regenerate = False
             reason = ""
 
-            # Force upgrade legacy pre-TP3, pre-7TF, or non-Sniper (SL > 52p / missing entry_reasons) setups
+            # Force upgrade legacy setups (pre-TP3, pre-7TF, pre-Sniper, or pre-KeyZone proof)
             risk_pips_val = float(setup.get("risk_pips", 0.0) or 0.0)
             tp1_pips_val = float(setup.get("reward_tp1_pips", 0.0) or 0.0)
+            exec_type = str(setup.get("execution_type", "INSTANT")).upper()
+            cur_status = str(setup.get("status", "ACTIVE")).upper()
             if (
                 tp3 <= 0
                 or entry_p <= 0
                 or sl <= 0
                 or not setup.get("mtf_overview")
                 or not setup.get("entry_reasons")
+                or not setup.get("zone_proof")
+                or int(setup.get("setup_quality_score", 0) or 0) <= 0
                 or (action in ("BUY", "SELL") and (risk_pips_val > 52.0 or risk_pips_val < 28.0 or tp1_pips_val < 55.0))
             ):
                 should_regenerate = True
-                reason = "Kalibrasi setup ke Sniper Scalping 7-TF (SL ketat 30–50 pips, TP1 60 pips, & Alasan Entry terstruktur)."
+                reason = "Kalibrasi setup ke Key-Zone Sniper 7-TF (Zona Reaksi Asli, SL 30–50p, TP1 60p, & Bukti Zona)."
 
-            # --- 1. EVALUATE SELL SCALP SETUP ---
+            # --- 1. EVALUATE SELL SCALP / KEY-ZONE LIMIT SETUP ---
             elif action == "SELL":
-                if curr_price >= sl:
+                if exec_type == "LIMIT" and cur_status == "PENDING_LIMIT":
+                    if curr_price >= sl:
+                        should_regenerate = True
+                        reason = f"Harga (${curr_price:.2f}) menembus zona Supply/SL (${sl:.2f})."
+                    elif curr_price >= (entry_p - 1.20):
+                        # Limit Order filled! Transition to ACTIVE tracking
+                        setup["status"] = "ACTIVE"
+                        setup["status_message"] = (
+                            f"LIMIT TERJEMPUT di ${entry_p:.2f}! Posisi SELL aktif • SL ${sl:.2f} | TP1 ${tp1:.2f} (+60p)"
+                        )
+                        latest.trade_setup_json = json.dumps(setup)
+                        db.commit()
+                        return latest
+                    elif age_hours >= 4.0 or (tp3 > 0 and curr_price < tp3 - 10.0):
+                        should_regenerate = True
+                        reason = "Pending SELL LIMIT melewati jendela 4 jam atau harga menjauh — memperbarui Key Zone."
+                    else:
+                        dist_p = round((entry_p - curr_price) * 10.0, 1)
+                        setup["zone_distance_pips"] = max(0.0, dist_p)
+                        setup["status"] = "PENDING_LIMIT"
+                        setup["status_message"] = (
+                            f"Menunggu harga naik +{dist_p:.0f} pips ke Key Zone {setup.get('entry_zone', f'${entry_p:.2f}')} "
+                            f"(SL -{risk_pips_val:.0f}p aman di luar tembok)"
+                        )
+                        latest.trade_setup_json = json.dumps(setup)
+                        db.commit()
+                        return latest
+                elif curr_price >= sl:
                     should_regenerate = True
                     reason = f"Harga (${curr_price:.2f}) menyentuh SL (${sl:.2f})."
                 elif curr_price <= tp3:
@@ -285,7 +316,7 @@ class AnalysisService:
                 elif curr_price <= tp2 and tp2 > 0:
                     setup["status"] = "RUNNING_TP2_HIT"
                     setup["status_message"] = (
-                        f"TP2 ${tp2:.2f} Hit (+{setup.get('reward_tp2_pips', 70):.0f} pips)! "
+                        f"TP2 ${tp2:.2f} Hit (+{setup.get('reward_tp2_pips', 100):.0f} pips)! "
                         f"Kunci 80% total lot & geser SL ke TP1 (${tp1:.2f}). Sisa 20% runner ke TP3 ${tp3:.2f}."
                     )
                     latest.trade_setup_json = json.dumps(setup)
@@ -294,29 +325,55 @@ class AnalysisService:
                 elif curr_price <= tp1 and tp1 > 0:
                     setup["status"] = "RUNNING_TP1_HIT"
                     setup["status_message"] = (
-                        f"TP1 ${tp1:.2f} Hit (+{setup.get('reward_tp1_pips', 35):.0f} pips)! "
+                        f"TP1 ${tp1:.2f} Hit (+{setup.get('reward_tp1_pips', 60):.0f} pips)! "
                         f"Kunci 40% lot & geser SL ke BEP (${entry_p:.2f}). Lanjut ke TP2 ${tp2:.2f} / TP3 ${tp3:.2f}."
                     )
                     latest.trade_setup_json = json.dumps(setup)
                     db.commit()
                     return latest
-                elif age_hours >= 3.0:
+                elif age_hours >= 3.5:
                     should_regenerate = True
-                    reason = "Setup scalping SELL melebihi jendela 3 jam — kalibrasi sesi baru."
+                    reason = "Setup aktif SELL melebihi jendela 3.5 jam — kalibrasi sesi baru."
                 else:
                     pips_diff = round((entry_p - curr_price) * 10.0, 1)
                     floating_str = f"+{pips_diff:.1f}" if pips_diff >= 0 else f"{pips_diff:.1f}"
                     setup["status"] = "ACTIVE"
                     setup["status_message"] = (
-                        f"{setup.get('action_label', 'SELL SCALP')} • Acuan ${entry_p:.2f} | Floating {floating_str} pips"
+                        f"Posisi SELL Aktif • Acuan ${entry_p:.2f} | Floating {floating_str} pips"
                     )
                     latest.trade_setup_json = json.dumps(setup)
                     db.commit()
                     return latest
 
-            # --- 2. EVALUATE BUY SCALP SETUP ---
+            # --- 2. EVALUATE BUY SCALP / KEY-ZONE LIMIT SETUP ---
             elif action == "BUY":
-                if curr_price <= sl:
+                if exec_type == "LIMIT" and cur_status == "PENDING_LIMIT":
+                    if curr_price <= sl:
+                        should_regenerate = True
+                        reason = f"Harga (${curr_price:.2f}) menembus zona Demand/SL (${sl:.2f})."
+                    elif curr_price <= (entry_p + 1.20):
+                        setup["status"] = "ACTIVE"
+                        setup["status_message"] = (
+                            f"LIMIT TERJEMPUT di ${entry_p:.2f}! Posisi BUY aktif • SL ${sl:.2f} | TP1 ${tp1:.2f} (+60p)"
+                        )
+                        latest.trade_setup_json = json.dumps(setup)
+                        db.commit()
+                        return latest
+                    elif age_hours >= 4.0 or (tp3 > 0 and curr_price > tp3 + 10.0):
+                        should_regenerate = True
+                        reason = "Pending BUY LIMIT melewati jendela 4 jam atau harga menjauh — memperbarui Key Zone."
+                    else:
+                        dist_p = round((curr_price - entry_p) * 10.0, 1)
+                        setup["zone_distance_pips"] = max(0.0, dist_p)
+                        setup["status"] = "PENDING_LIMIT"
+                        setup["status_message"] = (
+                            f"Menunggu harga turun -{dist_p:.0f} pips ke Key Zone {setup.get('entry_zone', f'${entry_p:.2f}')} "
+                            f"(SL -{risk_pips_val:.0f}p aman di luar tembok)"
+                        )
+                        latest.trade_setup_json = json.dumps(setup)
+                        db.commit()
+                        return latest
+                elif curr_price <= sl:
                     should_regenerate = True
                     reason = f"Harga (${curr_price:.2f}) menyentuh SL (${sl:.2f})."
                 elif curr_price >= tp3:
@@ -325,7 +382,7 @@ class AnalysisService:
                 elif curr_price >= tp2 and tp2 > 0:
                     setup["status"] = "RUNNING_TP2_HIT"
                     setup["status_message"] = (
-                        f"TP2 ${tp2:.2f} Hit (+{setup.get('reward_tp2_pips', 70):.0f} pips)! "
+                        f"TP2 ${tp2:.2f} Hit (+{setup.get('reward_tp2_pips', 100):.0f} pips)! "
                         f"Kunci 80% total lot & geser SL ke TP1 (${tp1:.2f}). Sisa 20% runner ke TP3 ${tp3:.2f}."
                     )
                     latest.trade_setup_json = json.dumps(setup)
@@ -334,21 +391,21 @@ class AnalysisService:
                 elif curr_price >= tp1 and tp1 > 0:
                     setup["status"] = "RUNNING_TP1_HIT"
                     setup["status_message"] = (
-                        f"TP1 ${tp1:.2f} Hit (+{setup.get('reward_tp1_pips', 35):.0f} pips)! "
+                        f"TP1 ${tp1:.2f} Hit (+{setup.get('reward_tp1_pips', 60):.0f} pips)! "
                         f"Kunci 40% lot & geser SL ke BEP (${entry_p:.2f}). Lanjut ke TP2 ${tp2:.2f} / TP3 ${tp3:.2f}."
                     )
                     latest.trade_setup_json = json.dumps(setup)
                     db.commit()
                     return latest
-                elif age_hours >= 3.0:
+                elif age_hours >= 3.5:
                     should_regenerate = True
-                    reason = "Setup scalping BUY melebihi jendela 3 jam — kalibrasi sesi baru."
+                    reason = "Setup aktif BUY melebihi jendela 3.5 jam — kalibrasi sesi baru."
                 else:
                     pips_diff = round((curr_price - entry_p) * 10.0, 1)
                     floating_str = f"+{pips_diff:.1f}" if pips_diff >= 0 else f"{pips_diff:.1f}"
                     setup["status"] = "ACTIVE"
                     setup["status_message"] = (
-                        f"{setup.get('action_label', 'BUY SCALP')} • Acuan ${entry_p:.2f} | Floating {floating_str} pips"
+                        f"Posisi BUY Aktif • Acuan ${entry_p:.2f} | Floating {floating_str} pips"
                     )
                     latest.trade_setup_json = json.dumps(setup)
                     db.commit()

@@ -18,7 +18,10 @@ class TradeSetup(BaseModel):
     mtf_alignment: str = ""  # e.g. "6/7 BEARISH • Selaras Kuat"
     mtf_overview: List[Dict[str, Any]] = []  # All 7 TFs: M1, M5, M15, M30, H1, H4, D1
     confluence_note: str = ""  # Cross-timeframe zone comparison summary
-    entry_zone: str = ""  # e.g. $3562.50 - $3564.20
+    setup_quality_score: int = 78  # 0-100 structural zone quality score (not win rate)
+    zone_proof: str = ""  # Concrete candle touch/rejection & TF confluence evidence
+    zone_distance_pips: float = 0.0  # Distance from current spot to limit zone in pips
+    entry_zone: str = ""  # e.g. $3554.80 - $3556.50
     entry_price: float = 0.0
     stop_loss: float = 0.0
     take_profit_1: float = 0.0

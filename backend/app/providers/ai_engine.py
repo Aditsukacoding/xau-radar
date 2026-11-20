@@ -21,20 +21,21 @@ ATURAN MUTLAK INTEGRITAS DATA, PROFIL SNIPER & ZERO-HALLUCINATION:
    - **M15 & M5 (Setup TF — Zona Sniper & Swing)**: Cari tepi zona pullback/konfluensi agar Stop Loss ketat terlindungi di balik struktur.
    - **M1 (LTF — Sniper Trigger)**: Cek apakah M1 sudah konfirmasi reaksi tepat di zona (`"INSTANT"`) atau harga sudah lari jauh sehingga WAJIB `"LIMIT"` menunggu pullback/retest tipis (ANTI-KEJAR HARGA!).
    - Hanya gunakan `WAIT` jika ada rilis berita HIGH-IMPACT USD (NFP/CPI/FOMC/PCE) kurang dari 15 menit lagi.
-4. PROFIL RISK SNIPER SCALPING USER (WAJIB DIPATUHI):
+4. PROFIL KEY-ZONE SNIPER SCALPING USER (WAJIB DIPATUHI):
    - Konvensi pip XAU/USD: `10 pips = $1.00` (jadi `30–50 pips = $3.00–$5.00`, `60 pips = $6.00`).
-   - **ZONA ENTRY KETAT**: Lebar maksimal 10–14 pips ($1.00–$1.40) di tepi zona konfluensi/pullback terdekat.
+   - **JANGAN MENCARI ZONA TERLALU DEKAT SPOT (< 45 PIPS / RAWAN SWEEP!)**:
+     * JANGAN membuat zona entry buatan yang mepet harga spot saat harga melayang di ruang kosong atau sudah jenuh (RSI oversold di dasar / overbought di puncak)!
+     * WAJIB pilih **KEY STRUCTURAL ZONE ASLI** dari `confluence_supply_zones` (untuk SELL) atau `confluence_demand_zones` (untuk BUY) — utamakan zona yang punya reaksi berulang (`touches >= 2` / `rejections >= 2` / Flip SBR-RBS) pada jarak aman **45–420 pips ($4.50–$42.00)** dari `current_price` menggunakan `"LIMIT"` (`BUY LIMIT (KEY ZONE)` / `SELL LIMIT (KEY ZONE)`).
+     * Gunakan `"INSTANT"` HANYA jika `current_price` memang SEDANG menyentuh (<= 18 pips) Key Zone multi-TF yang teruji kuat + konfirmasi candle M1/M5!
    - **STOP LOSS (SL) KETAT SNIPER: WAJIB 30–50 PIPS ($3.00–$5.00)**:
-     * Sesi tenang / Asia: targetkan 30–38 pips ($3.00–$3.80) di balik swing M1/M5 terdekat.
-     * Sesi aktif / London & New York: targetkan 40–50 pips ($4.00–$5.00) di balik swing M5/M15 terdekat.
-     * JANGAN melebihi 50 pips! Jika harga spot terlalu jauh dari swing, pilih `"LIMIT"` menunggu pullback agar SL tetap aman di 30–50 pips.
+     * Diletakkan persis di luar ekor zona Supply/Demand tersebut (`30–40p` sesi tenang, `40–50p` sesi aktif). JANGAN melebihi 50 pips!
    - **3-TIER TAKE PROFIT SCALING (WAJIB LENGKAP TP1, TP2, TP3)**:
      * **TP1 (Wajib 60 Pips / $6.00 — Amankan 40% Lot)**: Tepat +60 pips dari `entry_price` (RRR TP1 = 1:1.2 s/d 1:2.0) → langsung geser SL ke Breakeven (BEP).
-     * **TP2 (Struktur Intraday — Amankan 40% Lot)**: Menyesuaikan zona konfluensi/swing M15/M30/H1 berikutnya (kisaran +95 hingga +135 pips) → geser SL ke TP1.
-     * **TP3 (Extended Runner — Tahan 20% Lot)**: Menyesuaikan target likuiditas H1/H4 berikutnya (kisaran +150 hingga +220 pips).
-5. BAHASA & PENJELASAN ALASAN ENTRY:
-   - Bahasa Indonesia lugas, ramah pembaca, langsung ke inti alasan ("kenapa masuk di sini, kenapa SL di situ, kenapa TP di sana").
-   - WAJIB sertakan array `entry_reasons` tepat 4 poin agar trader langsung paham logika setup.
+     * **TP2 (Struktur Lawan Asli — Amankan 40% Lot)**: Membidik zona Support/Resistance struktural utama (M15/M30/H1) → geser SL ke TP1.
+     * **TP3 (Extended Runner — Tahan 20% Lot)**: Membidik tembok likuiditas major H1/H4/D1 berikutnya.
+5. BAHASA, BUKTI ZONA & ALASAN ENTRY:
+   - Bahasa Indonesia lugas, ramah pembaca, langsung ke inti alasan ("kenapa menunggu zona ini, bukti reaksinya apa, kenapa SL di situ, kenapa TP di sana").
+   - WAJIB sertakan `setup_quality_score` (55–96), `zone_proof` (bukti jumlah sentuhan/penolakan & TF konfluensi dari JSON), dan array `entry_reasons` tepat 4 poin.
 
 OUTPUT HARUS BERUPA JSON VALID MURNI TANPA MARKDOWN WRAPPER:
 {
@@ -50,25 +51,27 @@ OUTPUT HARUS BERUPA JSON VALID MURNI TANPA MARKDOWN WRAPPER:
   },
   "trade_setup": {
     "action": "BUY" | "SELL" | "WAIT",
-    "action_label": "BUY NOW (SNIPER)" | "BUY LIMIT (SNIPER)" | "SELL NOW (SNIPER)" | "SELL LIMIT (SNIPER)" | "WAIT / NEWS GUARD",
-    "execution_type": "INSTANT" | "LIMIT" | "WAIT",
+    "action_label": "BUY LIMIT (KEY ZONE)" | "SELL LIMIT (KEY ZONE)" | "BUY NOW (KEY ZONE)" | "SELL NOW (KEY ZONE)" | "WAIT • NEWS GUARD",
+    "execution_type": "LIMIT" | "INSTANT" | "WAIT",
     "scalp_timeframe": "M1–D1 MTF",
-    "entry_zone": "$3562.90 - $3564.10",
-    "entry_price": 3563.50,
-    "stop_loss": 3559.50,
-    "take_profit_1": 3569.50,
-    "take_profit_2": 3574.50,
-    "take_profit_3": 3580.50,
+    "setup_quality_score": 82,
+    "zone_proof": "Diuji 5× (3× penolakan kuat) • Supply/Flip M5+M15+M30",
+    "entry_zone": "$3554.80 - $3556.50",
+    "entry_price": 3555.50,
+    "stop_loss": 3560.00,
+    "take_profit_1": 3549.50,
+    "take_profit_2": 3538.50,
+    "take_profit_3": 3529.00,
     "lot_management": "40% TP1 +60p (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3",
-    "confluence_note": "Penjelasan 1 kalimat timeframe mana saja yang sepakat di zona Support & Resistance terkuat.",
+    "confluence_note": "Penjelasan 1 kalimat timeframe mana saja yang sepakat di Key Zone Demand & Supply terkuat.",
     "entry_reasons": [
-      {"title": "Arah 7 Timeframe", "tag": "6/7 BULLISH", "tone": "bullish", "detail": "Penjelasan singkat keselarasan HTF (D1/H4/H1), ITF (M30/M15), dan LTF (M5/M1)."},
-      {"title": "Alasan Zona Entry", "tag": "SNIPER LIMIT", "tone": "cyan", "detail": "Kenapa masuk di zona ini (konfluensi/pullback/trigger M1-M5) agar tidak mengejar harga."},
-      {"title": "Proteksi SL Ketat", "tag": "-40 pips", "tone": "bearish", "detail": "Alasan SL ditaruh di balik swing/struktur terdekat dalam batas ketat 30–50 pips."},
-      {"title": "Target TP1–TP3", "tag": "TP1 +60p", "tone": "bullish", "detail": "TP1 +60 pips langsung kunci 40% & BEP, TP2 & TP3 membidik level struktur berikutnya."}
+      {"title": "Arah 7 Timeframe", "tag": "6/7 BEARISH", "tone": "bearish", "detail": "Penjelasan singkat keselarasan HTF (D1/H4/H1), ITF (M30/M15), dan LTF (M5/M1)."},
+      {"title": "Alasan Key Zone", "tag": "LIMIT KEY ZONE", "tone": "cyan", "detail": "Menunggu di zona Supply/Demand asli (tidak terlalu dekat spot) dengan bukti reaksi berulang."},
+      {"title": "Proteksi SL Ketat", "tag": "-45 pips", "tone": "bearish", "detail": "SL ditaruh tepat di luar ekor zona Supply/Demand dalam batas ketat 30–50 pips."},
+      {"title": "Target TP1–TP3", "tag": "TP1 +60p", "tone": "bullish", "detail": "TP1 +60 pips langsung kunci 40% & BEP, TP2 & TP3 membidik level struktur lawan asli."}
     ],
-    "technical_rationale": "Ringkasan 2 kalimat utuh alasan setup sniper berdasarkan 7 timeframe dan risk management.",
-    "invalidation_level": "Close candle M15 di bawah $3559.50 membatalkan setup ini."
+    "technical_rationale": "Ringkasan 2 kalimat utuh alasan setup Key-Zone Sniper berdasarkan 7 timeframe, bukti reaksi zona, dan risk management.",
+    "invalidation_level": "Close candle M15 di atas $3560.00 membatalkan setup ini."
   },
   "risk_factors": [
     "Faktor risiko 1",
@@ -770,6 +773,9 @@ class AIAgentEngine:
                 "mtf_alignment": align_label,
                 "mtf_overview": mtf_overview,
                 "confluence_note": conf_note,
+                "setup_quality_score": 60,
+                "zone_proof": f"News Guard Aktif (<15m jelang {imminent_event})",
+                "zone_distance_pips": 0.0,
                 "entry_zone": f"Tunggu rilis {imminent_event} selesai",
                 "entry_price": round(curr_price, 2),
                 "stop_loss": sl,
@@ -792,158 +798,185 @@ class AIAgentEngine:
                 "status_message": f"News Guard Aktif — Tunggu rilis {imminent_event}",
             }
 
-        # Gather micro-structure levels (M1/M5/M15 for tight Sniper SL) & wider structure (M15/M30/H1/H4 for TP2/TP3)
-        micro_sups_raw: List[tuple[float, str]] = []
-        micro_ress_raw: List[tuple[float, str]] = []
-        for tf_lbl, td in (("M1", m1), ("M5", m5), ("M15", m15)):
-            for lv in (td.get("swing_lows") or []) + (td.get("support_levels") or []):
-                micro_sups_raw.append((round(float(lv), 2), tf_lbl))
-            for lv in (td.get("swing_highs") or []) + (td.get("resistance_levels") or []):
-                micro_ress_raw.append((round(float(lv), 2), tf_lbl))
-
+        # Gather structural target levels across all 7 timeframes (for TP2 & TP3)
         target_sups_raw: List[tuple[float, str]] = []
         target_ress_raw: List[tuple[float, str]] = []
         for c in conf_sups:
-            target_sups_raw.append((round(float(c["price"]), 2), f"konfluensi {'+'.join(c['timeframes'][:3])}"))
+            target_sups_raw.append((round(float(c["price"]), 2), f"Demand {'+'.join(c['timeframes'][:4])}"))
         for c in conf_ress:
-            target_ress_raw.append((round(float(c["price"]), 2), f"konfluensi {'+'.join(c['timeframes'][:3])}"))
-        for tf_lbl, td in (("M15", m15), ("M30", m30), ("H1", h1), ("H4", h4)):
+            target_ress_raw.append((round(float(c["price"]), 2), f"Supply {'+'.join(c['timeframes'][:4])}"))
+        for tf_lbl, td in (("M5", m5), ("M15", m15), ("M30", m30), ("H1", h1), ("H4", h4)):
             for lv in (td.get("support_levels") or []) + (td.get("swing_lows") or []):
                 target_sups_raw.append((round(float(lv), 2), f"support {tf_lbl}"))
             for lv in (td.get("resistance_levels") or []) + (td.get("swing_highs") or []):
                 target_ress_raw.append((round(float(lv), 2), f"resistance {tf_lbl}"))
 
-        ema9_m5 = m5.get("ema_9")
-        ema21_m5 = m5.get("ema_21")
-        # Tight sniper entry pocket: $0.50–$0.65 half-width (10–13 pips full zone)
-        half_zone = round(max(0.50, min(0.65, base_risk * 0.14)), 2)
+        def _pick_proven_key_zone(
+            zones: List[Dict[str, Any]],
+            is_supply: bool,
+        ) -> tuple[Optional[Dict[str, Any]], bool]:
+            """
+            Selects an authentic proven Key Structural Zone (Supply/Demand/Flip):
+            1. Checks if price is ALREADY right inside a high-conviction multi-TF wall (<= 18p) for INSTANT sniper.
+            2. Otherwise strictly avoids noisy near-spot levels (< 45p) and selects the highest-quality
+               structural wall at a safe distance (45 - 450 pips from current spot).
+            """
+            # Check active retest of a major proven wall right now (<= 18p away)
+            active_wall = next(
+                (
+                    z for z in zones
+                    if float(z.get("distance_pips", 999)) <= 18.0
+                    and int(z.get("htf_itf_count", 0)) >= 2
+                    and int(z.get("rejections", 0)) >= 2
+                ),
+                None,
+            )
+            if active_wall is not None:
+                return active_wall, True
+
+            # Primary choice: Safe-distance proven Key Zone (45 - 450 pips away, NOT too close to spot!)
+            safe_zones = [
+                z for z in zones
+                if 45.0 <= float(z.get("distance_pips", 0)) <= 450.0
+                and (int(z.get("htf_itf_count", 0)) >= 1 or int(z.get("touches", 0)) >= 2)
+            ]
+            if safe_zones:
+                # Prefer strong multi-TF / high-quality zones; among equally strong zones prefer reachable ones
+                safe_zones.sort(
+                    key=lambda z: (
+                        int(z.get("quality_score", 70))
+                        + (6 if int(z.get("htf_itf_count", 0)) >= 2 else 0)
+                        + (4 if 60.0 <= float(z.get("distance_pips", 0)) <= 360.0 else 0)
+                    ),
+                    reverse=True,
+                )
+                return safe_zones[0], False
+
+            # Secondary fallback: any structural zone >= 40 pips away
+            wider = [z for z in zones if float(z.get("distance_pips", 0)) >= 40.0]
+            if wider:
+                return wider[0], False
+
+            return None, False
 
         if bias == "BULLISH":
             action = "BUY"
             m1_pa = str(m1.get("price_action", "")).upper()
             m5_pa = str(m5.get("price_action", "")).upper()
-            m1_bull = str(m1.get("trend_direction", "")).upper() == "BULLISH"
-            all_ltf_bull = m1_bull and str(m5.get("trend_direction", "")).upper() == "BULLISH"
-            near_ema = ema9_m5 is not None and abs(curr_price - float(ema9_m5)) <= 1.80
             pa_bull = m1_pa.startswith("BULLISH") or m5_pa.startswith("BULLISH")
 
-            # Check if a strong multi-TF Confluence Support sits right below price ($0.40–$3.20)
-            best_conf_sup = next(
-                (c for c in conf_sups if c["tf_count"] >= 2 and 0.40 <= (curr_price - c["price"]) <= 3.20),
-                None,
-            )
-            # Check if spot already has a protective M1/M5/M15 structural swing within 30–50 pips below
-            spot_sl_match = next(
-                (
-                    (round(lv - 0.50, 2), tf_lbl, lv)
-                    for lv, tf_lbl in sorted(micro_sups_raw, key=lambda x: x[0], reverse=True)
-                    if 3.00 <= (curr_price - (lv - 0.50)) <= 5.00
-                ),
-                None,
-            )
+            picked_zone, is_at_wall = _pick_proven_key_zone(conf_sups, is_supply=False)
 
-            entry_src_detail = ""
-            if best_conf_sup:
-                execution_type = "LIMIT"
-                action_label = "BUY LIMIT (SNIPER)"
-                entry_price = round(float(best_conf_sup["price"]), 2)
-                tfs_str = "+".join(best_conf_sup["timeframes"][:4])
-                entry_src_detail = (
-                    f"Sniper Limit di zona konfluensi Support {tfs_str} (${entry_price:.2f}) — "
-                    f"menunggu retest rapi agar SL ketat 30–50p terlindungi di balik area demand."
-                )
-            elif (all_ltf_bull or pa_bull) and (near_ema or spot_sl_match is not None):
+            if picked_zone is not None and is_at_wall and pa_bull:
                 execution_type = "INSTANT"
-                action_label = "BUY NOW (SNIPER)"
+                action_label = "BUY NOW (KEY ZONE)"
                 entry_price = round(curr_price, 2)
-                pa_note = m5.get("price_action_note") or "konfirmasi momentum buyer M1/M5 aktif"
+                z_low = round(min(float(picked_zone["low"]), entry_price - 0.55), 2)
+                z_high = round(max(float(picked_zone["high"]), entry_price + 0.55), 2)
+                # Keep tight pocket around current wall touch
+                entry_low = round(max(entry_price - 0.85, z_low), 2)
+                entry_high = round(min(entry_price + 0.85, z_high), 2)
+                zone_proof = str(picked_zone.get("proof_text") or "Retest Key Demand MTF aktif")
+                setup_quality = int(picked_zone.get("quality_score", 82))
+                zone_dist_pips = round(abs(entry_price - curr_price) * 10.0, 1)
                 entry_src_detail = (
-                    f"Harga tepat di area eksekusi dekat struktur/EMA M5 dengan {pa_note.lower()} — "
-                    f"siap masuk langsung tanpa mengejar candle jauh."
+                    f"Harga sedang menyentuh langsung tembok Key Demand (${entry_price:.2f}) dengan konfirmasi buyer M1/M5. "
+                    f"Bukti: {zone_proof}."
+                )
+            elif picked_zone is not None:
+                execution_type = "LIMIT"
+                action_label = "BUY LIMIT (KEY ZONE)"
+                entry_price = round(float(picked_zone["price"]), 2)
+                entry_low = round(float(picked_zone["low"]), 2)
+                entry_high = round(float(picked_zone["high"]), 2)
+                if (entry_high - entry_low) < 0.90:
+                    entry_low = round(entry_price - 0.60, 2)
+                    entry_high = round(entry_price + 0.60, 2)
+                zone_proof = str(picked_zone.get("proof_text") or "Zona Demand struktural terkonfirmasi")
+                setup_quality = int(picked_zone.get("quality_score", 80))
+                zone_dist_pips = round(abs(curr_price - entry_price) * 10.0, 1)
+                entry_src_detail = (
+                    f"Sabar menunggu pullback -{zone_dist_pips:.0f} pips ke Key Demand asli (${entry_price:.2f}) — "
+                    f"menghindari zona terlalu dekat spot yang rawan sapuan. Bukti: {zone_proof}."
                 )
             else:
-                # Anti-chase sniper pullback toward nearest micro support / EMA9 M5 (max $2.50 pullback)
+                # Safe structural pullback >= 55 pips below spot if no higher-TF zone was in list
                 execution_type = "LIMIT"
-                action_label = "BUY LIMIT (SNIPER)"
-                pullback_anchor = round(curr_price - min(1.80, max(0.90, base_risk * 0.35)), 2)
-                if ema9_m5 is not None and 0.60 <= (curr_price - float(ema9_m5)) <= 2.60:
-                    pullback_anchor = round(float(ema9_m5), 2)
-                    pb_reason = f"EMA9 M5 (${pullback_anchor:.2f})"
-                elif ema21_m5 is not None and 0.60 <= (curr_price - float(ema21_m5)) <= 2.80:
-                    pullback_anchor = round(float(ema21_m5), 2)
-                    pb_reason = f"EMA21 M5 (${pullback_anchor:.2f})"
-                else:
-                    pb_reason = f"area retest intraday (${pullback_anchor:.2f})"
-                entry_price = pullback_anchor
+                action_label = "BUY LIMIT (KEY ZONE)"
+                deep_sups = sorted([lv for lv, _ in target_sups_raw if (curr_price - lv) >= 4.50], reverse=True)
+                entry_price = round(deep_sups[0], 2) if deep_sups else round(curr_price - max(6.00, atr_m15 * 0.8), 2)
+                entry_low = round(entry_price - 0.65, 2)
+                entry_high = round(entry_price + 0.65, 2)
+                zone_dist_pips = round(abs(curr_price - entry_price) * 10.0, 1)
+                zone_proof = f"Area Demand struktural M15/H1 (-{zone_dist_pips:.0f} pips di bawah harga spot)"
+                setup_quality = 74
                 entry_src_detail = (
-                    f"Filter anti-kejar harga aktif: menunggu koreksi tipis ke {pb_reason} "
-                    f"supaya jarak SL ketat 30–50 pips tidak rawan kena sweep."
+                    f"Menghindari entry di area tanggung/terlalu dekat spot: pasang BUY LIMIT di area Demand "
+                    f"${entry_price:.2f} (-{zone_dist_pips:.0f} pips) agar rasio risk-reward optimal."
                 )
 
-            entry_low = round(entry_price - half_zone, 2)
-            entry_high = round(entry_price + half_zone, 2)
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
 
-            # Strict Sniper SL: 30–50 pips ($3.00–$5.00), structurally behind nearest M1/M5/M15 swing
-            sl_match = next(
-                (
-                    (round(lv - 0.50, 2), tf_lbl, lv)
-                    for lv, tf_lbl in sorted(micro_sups_raw, key=lambda x: x[0], reverse=True)
-                    if 3.00 <= (entry_price - (lv - 0.50)) <= 5.00 and (lv - 0.50) < entry_low
-                ),
-                None,
-            )
-            if sl_match:
-                stop_loss, sl_tf, sl_swing = sl_match
-                risk = round(entry_price - stop_loss, 2)
-                sl_src_detail = (
-                    f"SL di ${stop_loss:.2f} (-{round(risk * 10):.0f} pips) ditaruh tepat di bawah support/swing {sl_tf} "
-                    f"(${sl_swing:.2f}) — aman di dalam profil ketat 30–50 pips."
-                )
+            # Strict Sniper SL: 30–50 pips ($3.00–$5.00) cleanly outside the lower wall edge
+            wall_sl = round(entry_low - max(2.40, base_risk - (entry_price - entry_low)), 2)
+            dist_wall = round(entry_price - wall_sl, 2)
+            if dist_wall < 3.00:
+                stop_loss = round(entry_price - 3.20, 2)
+            elif dist_wall > 5.00:
+                stop_loss = round(entry_price - 5.00, 2)
             else:
-                stop_loss = round(entry_price - base_risk, 2)
-                risk = round(entry_price - stop_loss, 2)
-                sl_src_detail = (
-                    f"SL ketat di ${stop_loss:.2f} (-{round(risk * 10):.0f} pips) dikalibrasi khusus profil 30–50 pips "
-                    f"sesuai ritme volatilitas {session_name}."
-                )
+                stop_loss = wall_sl
+            if stop_loss >= entry_low - 1.20:
+                stop_loss = round(min(entry_low - 2.00, entry_price - base_risk), 2)
+            risk = round(entry_price - stop_loss, 2)
+            if risk < 3.00:
+                stop_loss = round(entry_price - 3.00, 2)
+                risk = 3.00
+            elif risk > 5.00:
+                stop_loss = round(entry_price - 5.00, 2)
+                risk = 5.00
 
-            # Strict TP1: exactly 60 pips ($6.00) -> 40% lot lock & SL->BEP
+            sl_src_detail = (
+                f"SL di ${stop_loss:.2f} (-{round(risk * 10):.0f} pips) diletakkan persis di bawah ekor zona Demand "
+                f"(${entry_low:.2f}) — terlindungi tembok struktur & tetap ketat di profil 30–50 pips."
+            )
+
+            # Strict TP1: exactly +60 pips ($6.00) -> 40% lot lock & SL->BEP
             tp1 = round(entry_price + 6.00, 2)
 
-            # Adaptive TP2: snap $0.40 ahead of structural resistance in [+95p .. +138p], else ~2.5x risk
+            # Adaptive TP2: aim at real opposing Supply/Resistance ahead (at least +100p, up to +260p)
             tp2_match = next(
                 (
-                    (round(lv - 0.40, 2), lbl)
+                    (round(lv - 0.50, 2), lbl)
                     for lv, lbl in sorted(target_ress_raw, key=lambda x: x[0])
-                    if (entry_price + 9.50) <= (lv - 0.40) <= (entry_price + 13.80)
+                    if (entry_price + 9.50) <= (lv - 0.50) <= (entry_price + 26.00)
                 ),
                 None,
             )
             if tp2_match:
                 tp2, tp2_src = tp2_match
             else:
-                tp2 = round(entry_price + max(9.50, min(12.50, risk * 2.50)), 2)
+                tp2 = round(entry_price + max(11.00, min(16.00, risk * 3.00)), 2)
                 tp2_src = "proyeksi struktur M15/H1"
 
-            # Adaptive TP3 (Runner): snap $0.50 ahead of next resistance in [tp2 + 45p .. +225p]
+            # Adaptive TP3 (Runner): aim at next major Supply/Resistance wall
             tp3_match = next(
                 (
-                    (round(lv - 0.50, 2), lbl)
+                    (round(lv - 0.60, 2), lbl)
                     for lv, lbl in sorted(target_ress_raw, key=lambda x: x[0])
-                    if (tp2 + 4.50) <= (lv - 0.50) <= (entry_price + 22.50)
+                    if (tp2 + 4.50) <= (lv - 0.60) <= (entry_price + 38.00)
                 ),
                 None,
             )
             if tp3_match:
                 tp3 = tp3_match[0]
             else:
-                tp3 = round(max(tp2 + 5.50, entry_price + max(15.50, min(20.00, risk * 3.80))), 2)
+                tp3 = round(max(tp2 + 5.50, entry_price + max(17.00, risk * 4.20)), 2)
 
             reward1 = round(tp1 - entry_price, 2)
             reward2 = round(tp2 - entry_price, 2)
             reward3 = round(tp3 - entry_price, 2)
-            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.0"
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.2"
 
             entry_reasons = AIAgentEngine._build_entry_reasons(
                 action=action,
@@ -966,135 +999,129 @@ class AIAgentEngine:
                 tp2_source_detail=tp2_src,
             )
             rationale = (
-                f"Sniper BUY ({align_label}, {session_name}): {entry_src_detail} "
+                f"Key-Zone BUY ({align_label}, Kualitas {setup_quality}/100): {entry_src_detail} "
                 f"SL ketat ${stop_loss:.2f} (-{round(risk * 10):.0f}p), "
                 f"TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f}p, 40% & BEP), "
                 f"TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f}p), TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f}p)."
             )
-            invalidation = f"Close candle M15 di bawah ${stop_loss:.2f} membatalkan setup BUY sniper."
+            invalidation = f"Close candle M15 di bawah ${stop_loss:.2f} menembus zona Demand dan membatalkan setup BUY."
 
         else:
             action = "SELL"
             m1_pa = str(m1.get("price_action", "")).upper()
             m5_pa = str(m5.get("price_action", "")).upper()
-            m1_bear = str(m1.get("trend_direction", "")).upper() == "BEARISH"
-            all_ltf_bear = m1_bear and str(m5.get("trend_direction", "")).upper() == "BEARISH"
-            near_ema = ema9_m5 is not None and abs(curr_price - float(ema9_m5)) <= 1.80
             pa_bear = m1_pa.startswith("BEARISH") or m5_pa.startswith("BEARISH")
 
-            best_conf_res = next(
-                (c for c in conf_ress if c["tf_count"] >= 2 and 0.40 <= (c["price"] - curr_price) <= 3.20),
-                None,
-            )
-            spot_sl_match = next(
-                (
-                    (round(lv + 0.50, 2), tf_lbl, lv)
-                    for lv, tf_lbl in sorted(micro_ress_raw, key=lambda x: x[0])
-                    if 3.00 <= ((lv + 0.50) - curr_price) <= 5.00
-                ),
-                None,
-            )
+            picked_zone, is_at_wall = _pick_proven_key_zone(conf_ress, is_supply=True)
 
-            entry_src_detail = ""
-            if best_conf_res:
-                execution_type = "LIMIT"
-                action_label = "SELL LIMIT (SNIPER)"
-                entry_price = round(float(best_conf_res["price"]), 2)
-                tfs_str = "+".join(best_conf_res["timeframes"][:4])
-                entry_src_detail = (
-                    f"Sniper Limit di zona konfluensi Resistance {tfs_str} (${entry_price:.2f}) — "
-                    f"menunggu retest rapi agar SL ketat 30–50p terlindungi di balik area supply."
-                )
-            elif (all_ltf_bear or pa_bear) and (near_ema or spot_sl_match is not None):
+            if picked_zone is not None and is_at_wall and pa_bear:
                 execution_type = "INSTANT"
-                action_label = "SELL NOW (SNIPER)"
+                action_label = "SELL NOW (KEY ZONE)"
                 entry_price = round(curr_price, 2)
-                pa_note = m5.get("price_action_note") or "konfirmasi tekanan seller M1/M5 aktif"
+                z_low = round(min(float(picked_zone["low"]), entry_price - 0.55), 2)
+                z_high = round(max(float(picked_zone["high"]), entry_price + 0.55), 2)
+                entry_low = round(max(entry_price - 0.85, z_low), 2)
+                entry_high = round(min(entry_price + 0.85, z_high), 2)
+                zone_proof = str(picked_zone.get("proof_text") or "Retest Key Supply MTF aktif")
+                setup_quality = int(picked_zone.get("quality_score", 82))
+                zone_dist_pips = round(abs(entry_price - curr_price) * 10.0, 1)
                 entry_src_detail = (
-                    f"Harga tepat di area eksekusi dekat struktur/EMA M5 dengan {pa_note.lower()} — "
-                    f"siap masuk langsung tanpa mengejar candle jauh."
+                    f"Harga sedang menyentuh langsung tembok Key Supply (${entry_price:.2f}) dengan konfirmasi seller M1/M5. "
+                    f"Bukti: {zone_proof}."
+                )
+            elif picked_zone is not None:
+                execution_type = "LIMIT"
+                action_label = "SELL LIMIT (KEY ZONE)"
+                entry_price = round(float(picked_zone["price"]), 2)
+                entry_low = round(float(picked_zone["low"]), 2)
+                entry_high = round(float(picked_zone["high"]), 2)
+                if (entry_high - entry_low) < 0.90:
+                    entry_low = round(entry_price - 0.60, 2)
+                    entry_high = round(entry_price + 0.60, 2)
+                zone_proof = str(picked_zone.get("proof_text") or "Zona Supply struktural terkonfirmasi")
+                setup_quality = int(picked_zone.get("quality_score", 80))
+                zone_dist_pips = round(abs(entry_price - curr_price) * 10.0, 1)
+                entry_src_detail = (
+                    f"Sabar menunggu pullback +{zone_dist_pips:.0f} pips ke Key Supply asli (${entry_price:.2f}) — "
+                    f"menghindari jual di area terlalu dekat/rawan sweep. Bukti: {zone_proof}."
                 )
             else:
                 execution_type = "LIMIT"
-                action_label = "SELL LIMIT (SNIPER)"
-                pullback_anchor = round(curr_price + min(1.80, max(0.90, base_risk * 0.35)), 2)
-                if ema9_m5 is not None and 0.60 <= (float(ema9_m5) - curr_price) <= 2.60:
-                    pullback_anchor = round(float(ema9_m5), 2)
-                    pb_reason = f"EMA9 M5 (${pullback_anchor:.2f})"
-                elif ema21_m5 is not None and 0.60 <= (float(ema21_m5) - curr_price) <= 2.80:
-                    pullback_anchor = round(float(ema21_m5), 2)
-                    pb_reason = f"EMA21 M5 (${pullback_anchor:.2f})"
-                else:
-                    pb_reason = f"area retest intraday (${pullback_anchor:.2f})"
-                entry_price = pullback_anchor
+                action_label = "SELL LIMIT (KEY ZONE)"
+                deep_res = sorted([lv for lv, _ in target_ress_raw if (lv - curr_price) >= 4.50])
+                entry_price = round(deep_res[0], 2) if deep_res else round(curr_price + max(6.00, atr_m15 * 0.8), 2)
+                entry_low = round(entry_price - 0.65, 2)
+                entry_high = round(entry_price + 0.65, 2)
+                zone_dist_pips = round(abs(entry_price - curr_price) * 10.0, 1)
+                zone_proof = f"Area Supply struktural M15/H1 (+{zone_dist_pips:.0f} pips di atas harga spot)"
+                setup_quality = 74
                 entry_src_detail = (
-                    f"Filter anti-kejar harga aktif: menunggu pantulan tipis ke {pb_reason} "
-                    f"supaya jarak SL ketat 30–50 pips tidak rawan kena sweep."
+                    f"Menghindari entry di area tanggung/terlalu dekat spot: pasang SELL LIMIT di area Supply "
+                    f"${entry_price:.2f} (+{zone_dist_pips:.0f} pips) agar rasio risk-reward optimal."
                 )
 
-            entry_low = round(entry_price - half_zone, 2)
-            entry_high = round(entry_price + half_zone, 2)
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
 
-            sl_match = next(
-                (
-                    (round(lv + 0.50, 2), tf_lbl, lv)
-                    for lv, tf_lbl in sorted(micro_ress_raw, key=lambda x: x[0])
-                    if 3.00 <= ((lv + 0.50) - entry_price) <= 5.00 and (lv + 0.50) > entry_high
-                ),
-                None,
-            )
-            if sl_match:
-                stop_loss, sl_tf, sl_swing = sl_match
-                risk = round(stop_loss - entry_price, 2)
-                sl_src_detail = (
-                    f"SL di ${stop_loss:.2f} (-{round(risk * 10):.0f} pips) ditaruh tepat di atas resistance/swing {sl_tf} "
-                    f"(${sl_swing:.2f}) — aman di dalam profil ketat 30–50 pips."
-                )
+            # Strict Sniper SL: 30–50 pips ($3.00–$5.00) cleanly outside the upper wall edge
+            wall_sl = round(entry_high + max(2.40, base_risk - (entry_high - entry_price)), 2)
+            dist_wall = round(wall_sl - entry_price, 2)
+            if dist_wall < 3.00:
+                stop_loss = round(entry_price + 3.20, 2)
+            elif dist_wall > 5.00:
+                stop_loss = round(entry_price + 5.00, 2)
             else:
-                stop_loss = round(entry_price + base_risk, 2)
-                risk = round(stop_loss - entry_price, 2)
-                sl_src_detail = (
-                    f"SL ketat di ${stop_loss:.2f} (-{round(risk * 10):.0f} pips) dikalibrasi khusus profil 30–50 pips "
-                    f"sesuai ritme volatilitas {session_name}."
-                )
+                stop_loss = wall_sl
+            if stop_loss <= entry_high + 1.20:
+                stop_loss = round(max(entry_high + 2.00, entry_price + base_risk), 2)
+            risk = round(stop_loss - entry_price, 2)
+            if risk < 3.00:
+                stop_loss = round(entry_price + 3.00, 2)
+                risk = 3.00
+            elif risk > 5.00:
+                stop_loss = round(entry_price + 5.00, 2)
+                risk = 5.00
 
-            # Strict TP1: exactly 60 pips ($6.00) -> 40% lot lock & SL->BEP
+            sl_src_detail = (
+                f"SL di ${stop_loss:.2f} (-{round(risk * 10):.0f} pips) diletakkan persis di atas ekor zona Supply "
+                f"(${entry_high:.2f}) — terlindungi tembok struktur & tetap ketat di profil 30–50 pips."
+            )
+
+            # Strict TP1: exactly +60 pips ($6.00) -> 40% lot lock & SL->BEP
             tp1 = round(entry_price - 6.00, 2)
 
-            # Adaptive TP2: snap $0.40 ahead of structural support in [-138p .. -95p]
+            # Adaptive TP2: aim at real opposing Demand/Support below (at least +95p, up to +260p)
             tp2_match = next(
                 (
-                    (round(lv + 0.40, 2), lbl)
+                    (round(lv + 0.50, 2), lbl)
                     for lv, lbl in sorted(target_sups_raw, key=lambda x: x[0], reverse=True)
-                    if (entry_price - 13.80) <= (lv + 0.40) <= (entry_price - 9.50)
+                    if (entry_price - 26.00) <= (lv + 0.50) <= (entry_price - 9.50)
                 ),
                 None,
             )
             if tp2_match:
                 tp2, tp2_src = tp2_match
             else:
-                tp2 = round(entry_price - max(9.50, min(12.50, risk * 2.50)), 2)
+                tp2 = round(entry_price - max(11.00, min(16.00, risk * 3.00)), 2)
                 tp2_src = "proyeksi struktur M15/H1"
 
-            # Adaptive TP3 (Runner): snap $0.50 ahead of next support in [-225p .. tp2 - 45p]
+            # Adaptive TP3 (Runner): aim at next major Demand/Support wall below TP2
             tp3_match = next(
                 (
-                    (round(lv + 0.50, 2), lbl)
+                    (round(lv + 0.60, 2), lbl)
                     for lv, lbl in sorted(target_sups_raw, key=lambda x: x[0], reverse=True)
-                    if (entry_price - 22.50) <= (lv + 0.50) <= (tp2 - 4.50)
+                    if (entry_price - 38.00) <= (lv + 0.60) <= (tp2 - 4.50)
                 ),
                 None,
             )
             if tp3_match:
                 tp3 = tp3_match[0]
             else:
-                tp3 = round(min(tp2 - 5.50, entry_price - max(15.50, min(20.00, risk * 3.80))), 2)
+                tp3 = round(min(tp2 - 5.50, entry_price - max(17.00, risk * 4.20)), 2)
 
             reward1 = round(entry_price - tp1, 2)
             reward2 = round(entry_price - tp2, 2)
             reward3 = round(entry_price - tp3, 2)
-            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.0"
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.2"
 
             entry_reasons = AIAgentEngine._build_entry_reasons(
                 action=action,
@@ -1117,18 +1144,24 @@ class AIAgentEngine:
                 tp2_source_detail=tp2_src,
             )
             rationale = (
-                f"Sniper SELL ({align_label}, {session_name}): {entry_src_detail} "
+                f"Key-Zone SELL ({align_label}, Kualitas {setup_quality}/100): {entry_src_detail} "
                 f"SL ketat ${stop_loss:.2f} (-{round(risk * 10):.0f}p), "
                 f"TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f}p, 40% & BEP), "
                 f"TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f}p), TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f}p)."
             )
-            invalidation = f"Close candle M15 di atas ${stop_loss:.2f} membatalkan setup SELL sniper."
+            invalidation = f"Close candle M15 di atas ${stop_loss:.2f} menembus zona Supply dan membatalkan setup SELL."
 
         if execution_type == "INSTANT":
-            action_hint = f"Momentum aktif — siap eksekusi di area ${entry_price:.2f} (SL -{round(risk * 10):.0f}p)"
+            action_hint = f"Harga tepat di Key Zone ${entry_price:.2f} — siap eksekusi (SL -{round(risk * 10):.0f}p)"
+            initial_status = "ACTIVE"
         else:
-            verb = "turun ke" if action == "BUY" else "naik ke"
-            action_hint = f"Tunggu harga {verb} zona {entry_zone} agar SL -{round(risk * 10):.0f}p tetap aman"
+            verb = "turun" if action == "BUY" else "naik"
+            sign = "-" if action == "BUY" else "+"
+            action_hint = (
+                f"Menunggu harga {verb} {sign}{zone_dist_pips:.0f} pips ke Key Zone {entry_zone} "
+                f"(SL -{round(risk * 10):.0f}p aman di luar tembok)"
+            )
+            initial_status = "PENDING_LIMIT"
 
         return {
             "action": action,
@@ -1140,6 +1173,9 @@ class AIAgentEngine:
             "mtf_alignment": align_label,
             "mtf_overview": mtf_overview,
             "confluence_note": conf_note,
+            "setup_quality_score": setup_quality,
+            "zone_proof": zone_proof,
+            "zone_distance_pips": zone_dist_pips,
             "entry_zone": entry_zone,
             "entry_price": entry_price,
             "stop_loss": stop_loss,
@@ -1155,7 +1191,7 @@ class AIAgentEngine:
             "entry_reasons": entry_reasons,
             "technical_rationale": rationale,
             "invalidation_level": invalidation,
-            "status": "ACTIVE",
+            "status": initial_status,
             "status_message": action_hint,
         }
 
@@ -1248,20 +1284,27 @@ class AIAgentEngine:
         if action not in ["BUY", "SELL", "WAIT"]:
             action = "BUY" if bias == "BULLISH" else ("SELL" if bias == "BEARISH" else "WAIT")
 
-        # Entry price anchored closely around live market price for sniper scalping (max drift $3.50)
+        # Preserve proven Key Zone LIMIT entries up to $48.00 (480 pips) away from live spot!
+        execution_type = str(raw_setup.get("execution_type", "")).strip().upper()
         try:
             entry_p = round(float(raw_setup.get("entry_price", curr_price)), 2)
-            if abs(entry_p - curr_price) > 3.50 or entry_p <= 0:
-                entry_p = round(curr_price, 2)
         except (ValueError, TypeError):
             entry_p = round(curr_price, 2)
 
-        execution_type = str(raw_setup.get("execution_type", "")).strip().upper()
+        if entry_p <= 0 or abs(entry_p - curr_price) > 48.00:
+            entry_p = round(curr_price, 2)
+        # Ensure directional validity for pending Limit orders (BUY LIMIT <= spot, SELL LIMIT >= spot)
+        if execution_type == "LIMIT":
+            if action == "BUY" and entry_p > curr_price + 0.50:
+                entry_p = round(curr_price - 5.50, 2)
+            elif action == "SELL" and entry_p < curr_price - 0.50:
+                entry_p = round(curr_price + 5.50, 2)
+
         if execution_type not in ["INSTANT", "LIMIT", "WAIT"]:
             if action == "WAIT":
                 execution_type = "WAIT"
             else:
-                execution_type = "INSTANT" if abs(entry_p - curr_price) <= 0.80 else "LIMIT"
+                execution_type = "INSTANT" if abs(entry_p - curr_price) <= 1.20 else "LIMIT"
 
         # Tight Sniper scalping profile: SL strictly 30–50 pips ($3.00–$5.00), TP1 60 pips ($6.00)
         session_vol = str(m15.get("session_volatility") or (technical_data or {}).get("session_volatility") or "MEDIUM")
@@ -1270,7 +1313,7 @@ class AIAgentEngine:
             default_risk = round(max(3.80, min(5.00, 3.40 + atr_m5 * 0.14)), 2)
         else:
             default_risk = round(max(3.00, min(4.00, 2.85 + atr_m5 * 0.10)), 2)
-        half_zone = round(max(0.50, min(0.65, default_risk * 0.14)), 2)
+        half_zone = round(max(0.60, min(0.90, default_risk * 0.18)), 2)
         min_risk = 3.00
         max_risk = 5.00
 
@@ -1289,13 +1332,43 @@ class AIAgentEngine:
         mtf_alignment = str(confluence.get("alignment_label") or raw_setup.get("mtf_alignment") or "M1–D1 MTF")
         confluence_note = str(raw_setup.get("confluence_note") or confluence.get("confluence_note") or "").strip()
 
+        # Preserve or compute setup_quality_score, zone_proof & zone_distance_pips
+        conf_sups = confluence.get("confluence_supports") or []
+        conf_ress = confluence.get("confluence_resistances") or []
+        matched_zone_pool = conf_sups if action == "BUY" else conf_ress
+        nearest_proven = next(
+            (z for z in matched_zone_pool if abs(float(z.get("price", 0)) - entry_p) <= 3.50),
+            matched_zone_pool[0] if matched_zone_pool else None,
+        )
+        try:
+            setup_quality = int(raw_setup.get("setup_quality_score") or (nearest_proven.get("quality_score") if nearest_proven else 78))
+        except (ValueError, TypeError):
+            setup_quality = 78
+        setup_quality = max(55, min(96, setup_quality))
+        zone_proof = str(raw_setup.get("zone_proof") or (nearest_proven.get("proof_text") if nearest_proven else "")).strip()
+        zone_dist_pips = round(abs(entry_p - curr_price) * 10.0, 1)
+        if not zone_proof:
+            side_lbl = "Demand" if action == "BUY" else "Supply"
+            zone_proof = f"Zona {side_lbl} struktural MTF ({zone_dist_pips:.0f} pips dari spot)"
+
+        # Parse custom entry_zone bounds if valid and consistent with entry_p
+        raw_ez = str(raw_setup.get("entry_zone", "")).strip()
+        entry_low = round(entry_p - half_zone, 2)
+        entry_high = round(entry_p + half_zone, 2)
+        if "-" in raw_ez and "$" in raw_ez:
+            try:
+                parts = [float(p.replace("$", "").strip()) for p in raw_ez.split("-")[:2]]
+                if len(parts) == 2 and parts[0] < parts[1] and (parts[1] - parts[0]) <= 2.60 and abs(((parts[0] + parts[1]) / 2.0) - entry_p) <= 0.80:
+                    entry_low = round(parts[0], 2)
+                    entry_high = round(parts[1], 2)
+            except Exception:
+                pass
+
         if action == "BUY":
             entry_price = entry_p
-            entry_low = round(entry_price - half_zone, 2)
-            entry_high = round(entry_price + half_zone, 2)
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
             action_label = str(raw_setup.get("action_label", "")).strip() or (
-                "BUY NOW (SNIPER)" if execution_type == "INSTANT" else "BUY LIMIT (SNIPER)"
+                "BUY NOW (KEY ZONE)" if execution_type == "INSTANT" else "BUY LIMIT (KEY ZONE)"
             )
 
             sl = safe_float(raw_setup.get("stop_loss"))
@@ -1308,36 +1381,35 @@ class AIAgentEngine:
             if tp1 <= entry_high or not (5.80 <= (tp1 - entry_price) <= 6.20):
                 tp1 = round(entry_price + 6.00, 2)
 
+            # Wide structural ceiling for Key-Zone TP2 & TP3 (up to 320p / 450p!)
             tp2 = safe_float(raw_setup.get("take_profit_2"))
-            if tp2 < (tp1 + 3.00) or (tp2 - entry_price) > 15.00:
-                tp2 = round(entry_price + max(9.50, min(12.50, risk * 2.50)), 2)
+            if tp2 < (tp1 + 3.00) or (tp2 - entry_price) > 32.00:
+                tp2 = round(entry_price + max(11.00, min(16.00, risk * 3.00)), 2)
 
             tp3 = safe_float(raw_setup.get("take_profit_3"))
-            if tp3 < (tp2 + 4.00) or (tp3 - entry_price) > 24.00:
-                tp3 = round(max(tp2 + 5.50, entry_price + max(15.50, min(20.00, risk * 3.80))), 2)
+            if tp3 < (tp2 + 4.00) or (tp3 - entry_price) > 45.00:
+                tp3 = round(max(tp2 + 5.50, entry_price + max(17.00, risk * 4.20)), 2)
 
             reward1 = round(tp1 - entry_price, 2)
             reward2 = round(tp2 - entry_price, 2)
             reward3 = round(tp3 - entry_price, 2)
-            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.0"
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.2"
 
             rationale = ai_rationale if len(ai_rationale) >= 25 else (
-                f"Setup Sniper BUY ({session_name}): Entry {entry_zone}, SL ketat ${sl:.2f} (-{round(risk * 10):.0f} pips). "
-                f"Amankan 40% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f} pips, SL→BEP), "
-                f"40% di TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f} pips, SL→TP1), "
-                f"dan 20% runner menuju TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f} pips)."
+                f"Setup Key-Zone BUY ({session_name}, Kualitas {setup_quality}/100): Entry {entry_zone}, SL ketat ${sl:.2f} (-{round(risk * 10):.0f} pips). "
+                f"Amankan 40% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f}p, SL→BEP), "
+                f"40% di TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f}p, SL→TP1), "
+                f"dan 20% runner menuju TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f}p)."
             )
             invalidation = ai_invalidation if len(ai_invalidation) >= 12 else (
-                f"Close candle M15 di bawah ${sl:.2f} membatalkan setup BUY sniper."
+                f"Close candle M15 di bawah ${sl:.2f} menembus zona Demand dan membatalkan setup BUY."
             )
 
         elif action == "SELL":
             entry_price = entry_p
-            entry_low = round(entry_price - half_zone, 2)
-            entry_high = round(entry_price + half_zone, 2)
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
             action_label = str(raw_setup.get("action_label", "")).strip() or (
-                "SELL NOW (SNIPER)" if execution_type == "INSTANT" else "SELL LIMIT (SNIPER)"
+                "SELL NOW (KEY ZONE)" if execution_type == "INSTANT" else "SELL LIMIT (KEY ZONE)"
             )
 
             sl = safe_float(raw_setup.get("stop_loss"))
@@ -1350,26 +1422,26 @@ class AIAgentEngine:
                 tp1 = round(entry_price - 6.00, 2)
 
             tp2 = safe_float(raw_setup.get("take_profit_2"))
-            if tp2 <= 0 or tp2 > (tp1 - 3.00) or (entry_price - tp2) > 15.00:
-                tp2 = round(entry_price - max(9.50, min(12.50, risk * 2.50)), 2)
+            if tp2 <= 0 or tp2 > (tp1 - 3.00) or (entry_price - tp2) > 32.00:
+                tp2 = round(entry_price - max(11.00, min(16.00, risk * 3.00)), 2)
 
             tp3 = safe_float(raw_setup.get("take_profit_3"))
-            if tp3 <= 0 or tp3 > (tp2 - 4.00) or (entry_price - tp3) > 24.00:
-                tp3 = round(min(tp2 - 5.50, entry_price - max(15.50, min(20.00, risk * 3.80))), 2)
+            if tp3 <= 0 or tp3 > (tp2 - 4.00) or (entry_price - tp3) > 45.00:
+                tp3 = round(min(tp2 - 5.50, entry_price - max(17.00, risk * 4.20)), 2)
 
             reward1 = round(entry_price - tp1, 2)
             reward2 = round(entry_price - tp2, 2)
             reward3 = round(entry_price - tp3, 2)
-            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.0"
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.2"
 
             rationale = ai_rationale if len(ai_rationale) >= 25 else (
-                f"Setup Sniper SELL ({session_name}): Entry {entry_zone}, SL ketat ${sl:.2f} (-{round(risk * 10):.0f} pips). "
-                f"Amankan 40% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f} pips, SL→BEP), "
-                f"40% di TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f} pips, SL→TP1), "
-                f"dan 20% runner menuju TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f} pips)."
+                f"Setup Key-Zone SELL ({session_name}, Kualitas {setup_quality}/100): Entry {entry_zone}, SL ketat ${sl:.2f} (-{round(risk * 10):.0f} pips). "
+                f"Amankan 40% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f}p, SL→BEP), "
+                f"40% di TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f}p, SL→TP1), "
+                f"dan 20% runner menuju TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f}p)."
             )
             invalidation = ai_invalidation if len(ai_invalidation) >= 12 else (
-                f"Close candle M15 di atas ${sl:.2f} membatalkan setup SELL sniper."
+                f"Close candle M15 di atas ${sl:.2f} menembus zona Supply dan membatalkan setup SELL."
             )
 
         else:
@@ -1380,13 +1452,13 @@ class AIAgentEngine:
             entry_zone = str(raw_setup.get("entry_zone", "")).strip() or f"Breakout > ${primary_res:.2f} / < ${primary_sup:.2f}"
             sl = round(entry_price - default_risk, 2)
             tp1 = round(entry_price + 6.00, 2)
-            tp2 = round(entry_price + 10.50, 2)
-            tp3 = round(entry_price + 16.50, 2)
+            tp2 = round(entry_price + 11.00, 2)
+            tp3 = round(entry_price + 17.00, 2)
             risk = default_risk
             reward1 = round(tp1 - entry_price, 2)
             reward2 = round(tp2 - entry_price, 2)
             reward3 = round(tp3 - entry_price, 2)
-            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.0"
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 4.2"
             rationale = ai_rationale if len(ai_rationale) >= 20 else (
                 f"Menunggu konfirmasi breakout dari area ${primary_sup:.2f}–${primary_res:.2f} agar terhindar dari whipsaw."
             )
@@ -1424,12 +1496,19 @@ class AIAgentEngine:
             )
 
         if execution_type == "INSTANT":
-            action_hint = f"Momentum aktif — siap eksekusi di area ${entry_price:.2f} (SL -{round(risk * 10):.0f}p)"
+            action_hint = f"Harga tepat di Key Zone ${entry_price:.2f} — siap eksekusi (SL -{round(risk * 10):.0f}p)"
+            init_status = "ACTIVE"
         elif execution_type == "LIMIT":
-            verb = "turun ke" if action == "BUY" else "naik ke"
-            action_hint = f"Tunggu harga {verb} zona {entry_zone} agar SL -{round(risk * 10):.0f}p tetap aman"
+            verb = "turun" if action == "BUY" else "naik"
+            sign = "-" if action == "BUY" else "+"
+            action_hint = (
+                f"Menunggu harga {verb} {sign}{zone_dist_pips:.0f} pips ke Key Zone {entry_zone} "
+                f"(SL -{round(risk * 10):.0f}p aman di luar tembok)"
+            )
+            init_status = "PENDING_LIMIT"
         else:
             action_hint = str(raw_setup.get("status_message") or "News Guard Aktif — Tunggu volatilitas mereda")
+            init_status = "ACTIVE"
 
         trade_setup = {
             "action": action,
@@ -1441,6 +1520,9 @@ class AIAgentEngine:
             "mtf_alignment": mtf_alignment,
             "mtf_overview": mtf_overview,
             "confluence_note": confluence_note,
+            "setup_quality_score": setup_quality,
+            "zone_proof": zone_proof,
+            "zone_distance_pips": zone_dist_pips,
             "entry_zone": entry_zone,
             "entry_price": entry_price,
             "stop_loss": sl,
@@ -1456,7 +1538,7 @@ class AIAgentEngine:
             "entry_reasons": entry_reasons[:4],
             "technical_rationale": str(rationale),
             "invalidation_level": str(invalidation),
-            "status": "ACTIVE",
+            "status": init_status,
             "status_message": action_hint,
         }
 

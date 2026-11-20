@@ -80,6 +80,9 @@ class TradeSetupModel {
   final String mtfAlignment;
   final List<MtfTimeframeItem> mtfOverview;
   final String confluenceNote;
+  final int setupQualityScore;
+  final String zoneProof;
+  final double zoneDistancePips;
   final String entryZone;
   final double entryPrice;
   final double stopLoss;
@@ -113,6 +116,9 @@ class TradeSetupModel {
     this.mtfAlignment = '',
     this.mtfOverview = const [],
     this.confluenceNote = '',
+    this.setupQualityScore = 78,
+    this.zoneProof = '',
+    this.zoneDistancePips = 0.0,
     required this.entryZone,
     required this.entryPrice,
     required this.stopLoss,
@@ -175,6 +181,9 @@ class TradeSetupModel {
       mtfAlignment: json['mtf_alignment']?.toString() ?? '',
       mtfOverview: overview,
       confluenceNote: json['confluence_note']?.toString() ?? '',
+      setupQualityScore: (json['setup_quality_score'] as num?)?.toInt() ?? 78,
+      zoneProof: json['zone_proof']?.toString() ?? '',
+      zoneDistancePips: (json['zone_distance_pips'] as num?)?.toDouble() ?? 0.0,
       entryZone: json['entry_zone'] ?? '',
       entryPrice: entry,
       stopLoss: (json['stop_loss'] as num?)?.toDouble() ?? 0.0,
@@ -206,6 +215,9 @@ class TradeSetupModel {
       'mtf_alignment': mtfAlignment,
       'mtf_overview': mtfOverview.map((e) => e.toJson()).toList(),
       'confluence_note': confluenceNote,
+      'setup_quality_score': setupQualityScore,
+      'zone_proof': zoneProof,
+      'zone_distance_pips': zoneDistancePips,
       'entry_zone': entryZone,
       'entry_price': entryPrice,
       'stop_loss': stopLoss,

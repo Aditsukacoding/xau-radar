@@ -228,6 +228,92 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+
+                // Quality Score Bar + Concrete Historical Candle Proof
+                if (s.setupQualityScore > 0 || s.zoneProof.isNotEmpty) ...[
+                  const SizedBox(height: 11),
+                  Container(height: 0.7, color: actionColor.withValues(alpha: 0.20)),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Kualitas Key Zone',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            s.setupQualityScore >= 80
+                                ? 'Kuat • '
+                                : (s.setupQualityScore >= 70 ? 'Valid • ' : 'Moderat • '),
+                            style: TextStyle(
+                              color: s.setupQualityScore >= 80 ? AppColors.bullish : AppColors.gold,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            '${s.setupQualityScore}/100',
+                            style: AppTypography.mono(
+                              color: s.setupQualityScore >= 80 ? AppColors.bullish : AppColors.gold,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      height: 4.5,
+                      width: double.infinity,
+                      color: AppColors.surfaceInset,
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: (s.setupQualityScore.clamp(10, 100)) / 100.0,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: s.setupQualityScore >= 80 ? AppColors.bullish : AppColors.gold,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (s.zoneProof.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 1.5),
+                          child: Icon(LucideIcons.shieldCheck, color: AppColors.gold, size: 12.5),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Bukti: ${s.zoneProof}',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                              height: 1.38,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ],
             ),
           ),
@@ -267,7 +353,9 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                 child: _buildPrimaryTile(
                   label: 'ZONA ENTRI',
                   value: s.entryZone.isNotEmpty ? s.entryZone : '\$${s.entryPrice.toStringAsFixed(2)}',
-                  badge: '${isInstant ? 'Market' : 'Limit'} \$${s.entryPrice.toStringAsFixed(2)}',
+                  badge: (!isInstant && s.zoneDistancePips >= 10)
+                      ? 'Limit \$${s.entryPrice.toStringAsFixed(2)} (${isBuy ? '-' : '+'}${s.zoneDistancePips.toStringAsFixed(0)}p)'
+                      : '${isInstant ? 'Market' : 'Limit'} \$${s.entryPrice.toStringAsFixed(2)}',
                   valueColor: AppColors.textPrimary,
                   accentColor: AppColors.cyan,
                 ),

@@ -102,6 +102,11 @@ class TechnicalCalculator:
             sorted_candles, latest_price, swing_lows, swing_highs, atr_14
         )
 
+        # 6b. Authentic Structural Supply/Demand & Flip Zones with Touch/Rejection Proof
+        structural_demands, structural_supplies = TechnicalCalculator._detect_structural_zones(
+            sorted_candles, latest_price, atr_14
+        )
+
         # 7. Micro Price Action Signal (last 3 candles)
         price_action, pa_note = TechnicalCalculator._detect_price_action(sorted_candles, ema_9, ema_21)
 
@@ -130,6 +135,8 @@ class TechnicalCalculator:
             "swing_highs": swing_highs,
             "support_levels": supports,
             "resistance_levels": resistances,
+            "structural_demand_zones": structural_demands,
+            "structural_supply_zones": structural_supplies,
             "summary": trend_summary,
         }
 
@@ -389,6 +396,133 @@ class TechnicalCalculator:
         return direction, summary
 
     @staticmethod
+    def _detect_structural_zones(
+        candles: List[Dict[str, Any]],
+        current_price: float,
+        atr_14: float,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """
+        Detects authentic structural Supply/Demand and Flip (SBR/RBS) zones across up to 120 candles,
+        counting real historical candle touches & rejections as concrete zone proof.
+        """
+        recent = candles[-120:] if len(candles) > 120 else candles
+        n = len(recent)
+        if n < 9:
+            return [], []
+
+        win = 3
+        band = max(1.60, min(3.20, atr_14 * 0.42))
+
+        # Collect structural swing highs, swing lows, and Flip levels (broken S->R or R->S)
+        raw_supply: List[Tuple[float, str]] = []
+        raw_demand: List[Tuple[float, str]] = []
+
+        for i in range(win, n - win):
+            h = float(recent[i]["high"])
+            l = float(recent[i]["low"])
+            is_peak = all(h >= float(recent[j]["high"]) for j in range(i - win, i + win + 1) if j != i)
+            is_valley = all(l <= float(recent[j]["low"]) for j in range(i - win, i + win + 1) if j != i)
+
+            if is_peak:
+                if h > current_price + 1.00:
+                    raw_supply.append((round(h, 2), "SUPPLY"))
+                elif h < current_price - 1.00:
+                    # Broken resistance -> Resistance Become Support (Flip RBS)
+                    raw_demand.append((round(h, 2), "FLIP_RBS"))
+
+            if is_valley:
+                if l < current_price - 1.00:
+                    raw_demand.append((round(l, 2), "DEMAND"))
+                elif l > current_price + 1.00:
+                    # Broken support -> Support Become Resistance (Flip SBR)
+                    raw_supply.append((round(l, 2), "FLIP_SBR"))
+
+        def build_proven_zones(
+            candidates: List[Tuple[float, str]],
+            is_supply: bool,
+        ) -> List[Dict[str, Any]]:
+            if not candidates:
+                return []
+            ordered = sorted(candidates, key=lambda x: x[0], reverse=(not is_supply))
+            clusters: List[List[Tuple[float, str]]] = []
+            for pt in ordered:
+                placed = False
+                for cl in clusters:
+                    avg_p = sum(x[0] for x in cl) / len(cl)
+                    if abs(pt[0] - avg_p) <= band:
+                        cl.append(pt)
+                        placed = True
+                        break
+                if not placed:
+                    clusters.append([pt])
+
+            zones: List[Dict[str, Any]] = []
+            for cl in clusters:
+                z_low = round(min(x[0] for x in cl), 2)
+                z_high = round(max(x[0] for x in cl), 2)
+                z_mid = round(sum(x[0] for x in cl) / len(cl), 2)
+                # Keep compact realistic zone edges around midpoint
+                if (z_high - z_low) < 0.80:
+                    z_low = round(z_mid - 0.55, 2)
+                    z_high = round(z_mid + 0.55, 2)
+                elif (z_high - z_low) > 2.60:
+                    z_low = round(z_mid - 1.10, 2)
+                    z_high = round(z_mid + 1.10, 2)
+
+                types = {x[1] for x in cl}
+                if is_supply:
+                    z_type = "FLIP_SBR" if "FLIP_SBR" in types else "SUPPLY"
+                else:
+                    z_type = "FLIP_RBS" if "FLIP_RBS" in types else "DEMAND"
+
+                # Count authentic touches & rejections across the 120-candle history (spaced by >= 2 bars)
+                touches = 0
+                rejections = 0
+                last_touch_idx = -5
+                for idx, bar in enumerate(recent[:-1]):
+                    bh = float(bar["high"])
+                    bl = float(bar["low"])
+                    bc = float(bar["close"])
+                    bo = float(bar["open"])
+                    if bh >= (z_low - 0.45) and bl <= (z_high + 0.45):
+                        if idx - last_touch_idx >= 2:
+                            touches += 1
+                            last_touch_idx = idx
+                            if is_supply and bc < z_high and (bh - max(bo, bc)) >= 0.35:
+                                rejections += 1
+                            elif (not is_supply) and bc > z_low and (min(bo, bc) - bl) >= 0.35:
+                                rejections += 1
+                            elif is_supply and bc <= z_low:
+                                rejections += 1
+                            elif (not is_supply) and bc >= z_high:
+                                rejections += 1
+
+                dist_pips = round(abs(z_mid - current_price) * 10.0, 1)
+                if dist_pips < 12.0 or dist_pips > 600.0:
+                    continue
+
+                zones.append({
+                    "price": z_mid,
+                    "low": z_low,
+                    "high": z_high,
+                    "touches": max(touches, len(cl)),
+                    "rejections": max(rejections, 1 if len(cl) >= 2 else 0),
+                    "zone_type": z_type,
+                    "distance_pips": dist_pips,
+                })
+
+            # Rank by reaction proof (rejections + touches) and Flip bonus
+            zones.sort(
+                key=lambda z: (
+                    z["rejections"] * 2.2 + z["touches"] * 1.1 + (1.5 if "FLIP" in z["zone_type"] else 0.0)
+                ),
+                reverse=True,
+            )
+            return zones[:5]
+
+        return build_proven_zones(raw_demand, is_supply=False), build_proven_zones(raw_supply, is_supply=True)
+
+    @staticmethod
     def analyze_mtf_confluence(
         mtf_map: Dict[str, Dict[str, Any]],
         curr_price: float,
@@ -397,21 +531,23 @@ class TechnicalCalculator:
         Synthesizes all 7 timeframes (M1, M5, M15, M30, H1, H4, D1) into:
         - Per-timeframe directional & S/R comparison matrix (mtf_overview)
         - Top-Down Alignment (HTF D1/H4/H1 vs ITF M30/M15 vs LTF M5/M1)
-        - Cross-Timeframe Confluence Support & Resistance clusters (overlapping zones across TFs)
+        - Proven Structural Key Zones (Supply/Demand/Flip) with touch/rejection counts,
+          explicitly penalizing noisy zones that are too close (< 45 pips) to live price.
         """
         ordered_tfs = [
-            ("1m", "M1", 0.7),
-            ("5m", "M5", 1.0),
-            ("15m", "M15", 1.4),
-            ("30m", "M30", 1.6),
-            ("1h", "H1", 2.0),
-            ("4h", "H4", 2.5),
-            ("1d", "D1", 3.0),
+            ("1m", "M1", 0.55),
+            ("5m", "M5", 1.15),
+            ("15m", "M15", 1.70),
+            ("30m", "M30", 2.00),
+            ("1h", "H1", 2.40),
+            ("4h", "H4", 2.65),
+            ("1d", "D1", 2.50),
         ]
 
         overview: List[Dict[str, Any]] = []
-        all_sups: List[Tuple[float, str, float]] = []
-        all_res: List[Tuple[float, str, float]] = []
+        # Each point: (price, low, high, tf_label, weight, touches, rejections, zone_type)
+        all_sups: List[Tuple[float, float, float, str, float, int, int, str]] = []
+        all_res: List[Tuple[float, float, float, str, float, int, int, str]] = []
 
         bull_cnt = 0
         bear_cnt = 0
@@ -447,10 +583,41 @@ class TechnicalCalculator:
             nearest_sup = round(max(sups), 2) if sups else round(curr_price - 5.0, 2)
             nearest_res = round(min(ress), 2) if ress else round(curr_price + 5.0, 2)
 
+            # Ingest authentic touch/rejection-proven structural zones first
+            for z in td.get("structural_demand_zones") or []:
+                zp = round(float(z["price"]), 2)
+                if zp < curr_price - 0.80:
+                    all_sups.append((
+                        zp,
+                        round(float(z.get("low", zp - 0.6)), 2),
+                        round(float(z.get("high", zp + 0.6)), 2),
+                        label,
+                        weight * 1.25,
+                        int(z.get("touches", 1)),
+                        int(z.get("rejections", 1)),
+                        str(z.get("zone_type", "DEMAND")),
+                    ))
+            for z in td.get("structural_supply_zones") or []:
+                zp = round(float(z["price"]), 2)
+                if zp > curr_price + 0.80:
+                    all_res.append((
+                        zp,
+                        round(float(z.get("low", zp - 0.6)), 2),
+                        round(float(z.get("high", zp + 0.6)), 2),
+                        label,
+                        weight * 1.25,
+                        int(z.get("touches", 1)),
+                        int(z.get("rejections", 1)),
+                        str(z.get("zone_type", "SUPPLY")),
+                    ))
+
+            # Also include classic S/R pivots & swings as supporting confluence votes
             for s in set(sups[:2] + sw_lows[:2]):
-                all_sups.append((round(s, 2), label, weight))
+                sf = round(s, 2)
+                all_sups.append((sf, round(sf - 0.55, 2), round(sf + 0.55, 2), label, weight * 0.75, 1, 0, "DEMAND"))
             for r in set(ress[:2] + sw_highs[:2]):
-                all_res.append((round(r, 2), label, weight))
+                rf = round(r, 2)
+                all_res.append((rf, round(rf - 0.55, 2), round(rf + 0.55, 2), label, weight * 0.75, 1, 0, "SUPPLY"))
 
             overview.append({
                 "tf": label,
@@ -462,17 +629,21 @@ class TechnicalCalculator:
                 "pa": str(td.get("price_action", "CONSOLIDATION")),
             })
 
-        # Cluster overlapping levels across timeframes (within $3.20 band)
-        def build_clusters(points: List[Tuple[float, str, float]], sort_desc: bool) -> List[Dict[str, Any]]:
+        # Cluster overlapping levels across timeframes (within $3.50 band) and score Key Zone quality
+        def build_key_zone_clusters(
+            points: List[Tuple[float, float, float, str, float, int, int, str]],
+            sort_desc: bool,
+            is_supply: bool,
+        ) -> List[Dict[str, Any]]:
             if not points:
                 return []
             ordered = sorted(points, key=lambda x: x[0], reverse=sort_desc)
-            clusters: List[List[Tuple[float, str, float]]] = []
+            clusters: List[List[Tuple[float, float, float, str, float, int, int, str]]] = []
             for pt in ordered:
                 placed = False
                 for cl in clusters:
                     avg_p = sum(x[0] for x in cl) / len(cl)
-                    if abs(pt[0] - avg_p) <= 3.20:
+                    if abs(pt[0] - avg_p) <= 3.50:
                         cl.append(pt)
                         placed = True
                         break
@@ -481,30 +652,91 @@ class TechnicalCalculator:
 
             formatted: List[Dict[str, Any]] = []
             for cl in clusters:
-                tfs_unique = list(dict.fromkeys(x[1] for x in cl))
-                w_sum = sum(x[2] for x in cl)
-                w_avg = round(sum(x[0] * x[2] for x in cl) / w_sum, 2) if w_sum > 0 else round(cl[0][0], 2)
+                tfs_unique = list(dict.fromkeys(x[3] for x in cl))
+                w_sum = sum(x[4] for x in cl)
+                w_avg = round(sum(x[0] * x[4] for x in cl) / w_sum, 2) if w_sum > 0 else round(cl[0][0], 2)
+                raw_low = round(min(x[1] for x in cl), 2)
+                raw_high = round(max(x[2] for x in cl), 2)
+                # Keep crisp sniper zone envelope ($1.20–$2.20 width) centered on weighted midpoint
+                half_w = max(0.60, min(1.05, (raw_high - raw_low) / 2.0))
+                z_low = round(w_avg - half_w, 2)
+                z_high = round(w_avg + half_w, 2)
+
+                # Aggregate unique touch/rejection proof (cap per-TF inflation cleanly)
+                total_touches = min(15, max(len(tfs_unique), sum(x[5] for x in cl) // max(1, len(cl) // len(tfs_unique))))
+                total_rejections = min(12, sum(x[6] for x in cl))
+                has_flip = any("FLIP" in x[7] for x in cl)
+                zone_kind = ("Flip SBR (Eks Support)" if has_flip else "Supply/Resistance") if is_supply else (
+                    "Flip RBS (Eks Resistance)" if has_flip else "Demand/Support"
+                )
+
+                dist_pips = round(abs(w_avg - curr_price) * 10.0, 1)
+
+                # Safe-distance multiplier: PENALIZE noisy near-spot zones (< 45 pips)!
+                if dist_pips < 45.0:
+                    dist_mult = 0.38
+                elif dist_pips <= 280.0:
+                    dist_mult = 1.30  # Prime Key Zone Intraday/Sniper sweet spot (45 - 280 pips)
+                elif dist_pips <= 450.0:
+                    dist_mult = 1.05  # Major Swing Key Zone (280 - 450 pips, e.g. M15/H1 major Supply)
+                else:
+                    dist_mult = 0.45
+
+                tf_cnt = len(tfs_unique)
+                # Non-M1 higher-TF count for genuine structural conviction
+                htf_itf_cnt = sum(1 for t in tfs_unique if t != "M1")
+                rank_score = (w_sum + total_rejections * 0.9 + total_touches * 0.4 + (1.8 if has_flip else 0.0)) * dist_mult
+
+                # Intuitive 0..100 technical zone quality score
+                q_score = int(round(min(96, max(58,
+                    54
+                    + htf_itf_cnt * 7.5
+                    + min(total_rejections, 5) * 3.0
+                    + min(total_touches, 6) * 1.5
+                    + (5 if has_flip else 0)
+                    + (4 if 45.0 <= dist_pips <= 380.0 else (-8 if dist_pips < 45.0 else -4))
+                ))))
+
+                tfs_str = "+".join(tfs_unique)
+                if total_rejections >= 2:
+                    proof_text = f"Diuji {total_touches}× ({total_rejections}× penolakan kuat) • {zone_kind} {tfs_str}"
+                else:
+                    proof_text = f"Diuji {total_touches}× reaksi struktur • {zone_kind} {tfs_str}"
+
                 formatted.append({
                     "price": w_avg,
-                    "low": round(min(x[0] for x in cl), 2),
-                    "high": round(max(x[0] for x in cl), 2),
+                    "low": z_low,
+                    "high": z_high,
                     "timeframes": tfs_unique,
-                    "tf_count": len(tfs_unique),
+                    "tf_count": tf_cnt,
+                    "htf_itf_count": htf_itf_cnt,
+                    "touches": total_touches,
+                    "rejections": total_rejections,
+                    "is_flip": has_flip,
+                    "zone_kind": zone_kind,
+                    "distance_pips": dist_pips,
+                    "quality_score": q_score,
+                    "proof_text": proof_text,
                     "weight": round(w_sum, 2),
+                    "_rank": round(rank_score, 3),
                 })
 
-            # Prioritize multi-TF clusters close to live price (proximity-weighted confluence)
             formatted.sort(
                 key=lambda c: (
-                    c["tf_count"] >= 2,
-                    c["weight"] / (1.0 + abs(c["price"] - curr_price) / 20.0),
+                    c["distance_pips"] >= 45.0 and c["distance_pips"] <= 450.0,
+                    c["_rank"],
                 ),
                 reverse=True,
             )
-            return formatted[:4]
+            # Clean internal rank key before returning
+            cleaned: List[Dict[str, Any]] = []
+            for item in formatted[:5]:
+                item.pop("_rank", None)
+                cleaned.append(item)
+            return cleaned
 
-        conf_supports = build_clusters(all_sups, sort_desc=True)
-        conf_resistances = build_clusters(all_res, sort_desc=False)
+        conf_supports = build_key_zone_clusters(all_sups, sort_desc=True, is_supply=False)
+        conf_resistances = build_key_zone_clusters(all_res, sort_desc=False, is_supply=True)
 
         # Tiered perspective comparison: HTF (D1/H4/H1) vs ITF (M30/M15) vs LTF (M5/M1)
         def group_bias(keys: List[str]) -> str:
@@ -543,7 +775,7 @@ class TechnicalCalculator:
 
         confluence_note = (
             f"Top-Down {alignment_label} (HTF {htf_bias} | ITF {itf_bias} | LTF {ltf_bias}). "
-            f"Zona konfluensi kuat: Support {top_sup_str} & Resistance {top_res_str}."
+            f"Key Zone terkuat: Demand {top_sup_str} & Supply {top_res_str}."
         )
 
         return {
