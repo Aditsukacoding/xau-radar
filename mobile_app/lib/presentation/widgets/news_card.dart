@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/wib_date_time.dart';
 import '../../data/models/news_article_model.dart';
@@ -20,17 +21,17 @@ class NewsCard extends StatelessWidget {
       case 'POSITIVE':
         sentimentColor = AppColors.bullish;
         sentimentText = 'BULLISH';
-        sentimentIcon = CupertinoIcons.arrow_up_right;
+        sentimentIcon = LucideIcons.arrowUpRight;
         break;
       case 'NEGATIVE':
         sentimentColor = AppColors.bearish;
         sentimentText = 'BEARISH';
-        sentimentIcon = CupertinoIcons.arrow_down_right;
+        sentimentIcon = LucideIcons.arrowDownRight;
         break;
       default:
         sentimentColor = AppColors.neutral;
         sentimentText = 'NETRAL';
-        sentimentIcon = CupertinoIcons.equal;
+        sentimentIcon = LucideIcons.minus;
     }
 
     return GestureDetector(
@@ -114,7 +115,7 @@ class NewsCard extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: [
-                      const Icon(CupertinoIcons.news, color: AppColors.textMuted, size: 13),
+                      const Icon(LucideIcons.newspaper, color: AppColors.textMuted, size: 13),
                       const SizedBox(width: 5),
                       Expanded(
                         child: Text(
@@ -143,7 +144,7 @@ class NewsCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 3),
-                    const Icon(CupertinoIcons.chevron_right, color: AppColors.primary, size: 12),
+                    const Icon(LucideIcons.chevronRight, color: AppColors.primary, size: 12),
                   ],
                 ),
               ],

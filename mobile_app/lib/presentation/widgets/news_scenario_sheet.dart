@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../data/models/news_intelligence_model.dart';
@@ -162,7 +162,7 @@ class NewsScenarioSheet extends StatelessWidget {
                       color: const Color(0x351F2636),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(CupertinoIcons.xmark, color: AppColors.textMuted, size: 16),
+                    child: const Icon(LucideIcons.x, color: AppColors.textMuted, size: 16),
                   ),
                 ),
               ],
@@ -201,7 +201,7 @@ class NewsScenarioSheet extends StatelessWidget {
 
                   // 1. Rezim Pasar Saat Ini
                   _buildSectionCard(
-                    icon: CupertinoIcons.flame_fill,
+                    icon: LucideIcons.flame,
                     iconColor: const Color(0xFFF59E0B),
                     title: '1. REZIM PASAR SAAT INI',
                     content: Column(
@@ -231,7 +231,7 @@ class NewsScenarioSheet extends StatelessWidget {
 
                   // 2. Fundamental & Jalur Transmisi Geopolitik
                   _buildSectionCard(
-                    icon: CupertinoIcons.arrow_branch,
+                    icon: LucideIcons.gitBranch,
                     iconColor: AppColors.primary,
                     title: '2. FUNDAMENTAL & JALUR TRANSMISI GEOPOLITIK',
                     content: Column(
@@ -254,7 +254,7 @@ class NewsScenarioSheet extends StatelessWidget {
                             children: [
                               const Row(
                                 children: [
-                                  Icon(CupertinoIcons.link, color: AppColors.primary, size: 12),
+                                  Icon(LucideIcons.link2, color: AppColors.primary, size: 12),
                                   SizedBox(width: 5),
                                   Text(
                                     'JALUR TRANSMISI DAMPAK KE EMAS',
@@ -277,7 +277,7 @@ class NewsScenarioSheet extends StatelessWidget {
 
                   // 3. Positioning & Sentimen Pasar
                   _buildSectionCard(
-                    icon: CupertinoIcons.person_3_fill,
+                    icon: LucideIcons.users,
                     iconColor: const Color(0xFF8B5CF6),
                     title: '3. POSITIONING & SENTIMEN PASAR',
                     content: Text(
@@ -289,7 +289,7 @@ class NewsScenarioSheet extends StatelessWidget {
 
                   // 4. Kondisi Chart Multi-Timeframe & Level Invalidasi
                   _buildSectionCard(
-                    icon: CupertinoIcons.chart_bar_alt_fill,
+                    icon: LucideIcons.chartCandlestick,
                     iconColor: const Color(0xFF10B981),
                     title: '4. KONDISI CHART & LEVEL INVALIDASI',
                     content: Column(
@@ -311,7 +311,7 @@ class NewsScenarioSheet extends StatelessWidget {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(CupertinoIcons.exclamationmark_octagon_fill, color: AppColors.bearish, size: 14),
+                              const Icon(LucideIcons.octagonAlert, color: AppColors.bearish, size: 14),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -353,7 +353,7 @@ class NewsScenarioSheet extends StatelessWidget {
 
                   // 6. Hal yang Bisa Mengubah Kesimpulan
                   _buildSectionCard(
-                    icon: CupertinoIcons.arrow_2_circlepath,
+                    icon: LucideIcons.refreshCw,
                     iconColor: const Color(0xFFEC4899),
                     title: '6. HAL YANG DAPAT MENGUBAH KESIMPULAN',
                     content: Column(
@@ -380,7 +380,7 @@ class NewsScenarioSheet extends StatelessWidget {
 
                   // 7. Daftar Katalis Tertunda
                   _buildSectionCard(
-                    icon: CupertinoIcons.clock_fill,
+                    icon: LucideIcons.clock,
                     iconColor: AppColors.primary,
                     title: '7. DATA YANG BELUM KELUAR (WIB)',
                     content: Column(

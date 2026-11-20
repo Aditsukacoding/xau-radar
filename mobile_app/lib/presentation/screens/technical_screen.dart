@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/api_service.dart';
@@ -149,7 +150,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(CupertinoIcons.exclamationmark_circle, color: AppColors.bearish, size: 36),
+                      const Icon(LucideIcons.circleAlert, color: AppColors.bearish, size: 36),
                       const SizedBox(height: 8),
                       Text('Gagal memuat: $_error', style: const TextStyle(color: AppColors.textMuted)),
                       const SizedBox(height: 12),
@@ -448,7 +449,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                                         children: [
                                           const Row(
                                             children: [
-                                              Icon(CupertinoIcons.arrow_down_circle_fill, color: AppColors.supportLine, size: 14),
+                                              Icon(LucideIcons.circleArrowDown, color: AppColors.supportLine, size: 14),
                                               SizedBox(width: 5),
                                               Text('Area Support', style: TextStyle(color: AppColors.supportLine, fontSize: 11, fontWeight: FontWeight.w700)),
                                             ],
@@ -472,7 +473,7 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
                                         children: [
                                           const Row(
                                             children: [
-                                              Icon(CupertinoIcons.arrow_up_circle_fill, color: AppColors.resistanceLine, size: 14),
+                                              Icon(LucideIcons.circleArrowUp, color: AppColors.resistanceLine, size: 14),
                                               SizedBox(width: 5),
                                               Text('Area Resistance', style: TextStyle(color: AppColors.resistanceLine, fontSize: 11, fontWeight: FontWeight.w700)),
                                             ],

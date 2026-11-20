@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/network/api_service.dart';
@@ -100,7 +101,7 @@ class _MainShellState extends State<MainShell> {
                                   borderRadius: BorderRadius.circular(11),
                                   border: Border.all(color: AppColors.gold.withValues(alpha: 0.30)),
                                 ),
-                                child: const Icon(CupertinoIcons.slider_horizontal_3, color: AppColors.gold, size: 18),
+                                child: const Icon(LucideIcons.slidersHorizontal, color: AppColors.gold, size: 18),
                               ),
                               const SizedBox(width: 12),
                               const Expanded(
@@ -253,9 +254,9 @@ class _MainShellState extends State<MainShell> {
                   ],
                 ),
                 child: const Icon(
-                  CupertinoIcons.waveform_path_ecg,
+                  LucideIcons.radar,
                   color: Color(0xFF08090C),
-                  size: 16,
+                  size: 17,
                 ),
               ),
               const SizedBox(width: 10),
@@ -360,7 +361,7 @@ class _MainShellState extends State<MainShell> {
                   ),
                 ),
                 icon: const Icon(
-                  CupertinoIcons.slider_horizontal_3,
+                  LucideIcons.slidersHorizontal,
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -388,11 +389,11 @@ class _IosTabBar extends StatelessWidget {
   const _IosTabBar({required this.currentIndex, required this.onTap});
 
   static const _tabs = [
-    _TabItem(outlineIcon: CupertinoIcons.compass, filledIcon: CupertinoIcons.compass_fill, label: 'Pasar'),
-    _TabItem(outlineIcon: CupertinoIcons.calendar, filledIcon: CupertinoIcons.calendar_today, label: 'Kalender'),
-    _TabItem(outlineIcon: CupertinoIcons.globe, filledIcon: CupertinoIcons.globe, label: 'Berita'),
-    _TabItem(outlineIcon: CupertinoIcons.chart_bar_alt_fill, filledIcon: CupertinoIcons.chart_bar_alt_fill, label: 'Teknikal'),
-    _TabItem(outlineIcon: CupertinoIcons.sparkles, filledIcon: CupertinoIcons.sparkles, label: 'Sintesis'),
+    _TabItem(icon: LucideIcons.layoutDashboard, label: 'Pasar'),
+    _TabItem(icon: LucideIcons.calendarClock, label: 'Kalender'),
+    _TabItem(icon: LucideIcons.newspaper, label: 'Berita'),
+    _TabItem(icon: LucideIcons.chartCandlestick, label: 'Teknikal'),
+    _TabItem(icon: LucideIcons.sparkles, label: 'Sintesis'),
   ];
 
   @override
@@ -438,10 +439,9 @@ class _IosTabBar extends StatelessWidget {
 }
 
 class _TabItem {
-  final IconData outlineIcon;
-  final IconData filledIcon;
+  final IconData icon;
   final String label;
-  const _TabItem({required this.outlineIcon, required this.filledIcon, required this.label});
+  const _TabItem({required this.icon, required this.label});
 }
 
 class _IosTabItemWidget extends StatefulWidget {
@@ -525,16 +525,21 @@ class _IosTabItemWidgetState extends State<_IosTabItemWidget> with SingleTickerP
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: selected ? activeColor.withValues(alpha: 0.14) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         child: Icon(
-                          selected ? widget.tab.filledIcon : widget.tab.outlineIcon,
-                          key: ValueKey(selected),
-                          size: 22.0,
+                          widget.tab.icon,
+                          size: 19.5,
                           color: selected ? activeColor : inactiveColor,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       AnimatedDefaultTextStyle(
                         duration: const Duration(milliseconds: 180),
                         style: TextStyle(

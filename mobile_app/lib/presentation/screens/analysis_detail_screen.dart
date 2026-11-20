@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/wib_date_time.dart';
@@ -118,7 +119,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(CupertinoIcons.exclamationmark_circle, color: AppColors.bearish, size: 36),
+                      const Icon(LucideIcons.circleAlert, color: AppColors.bearish, size: 36),
                       const SizedBox(height: 8),
                       Text('Gagal memuat: $_error', style: const TextStyle(color: AppColors.textMuted)),
                       const SizedBox(height: 12),
@@ -197,7 +198,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                                       const CupertinoActivityIndicator(radius: 6, color: AppColors.primary),
                                       const SizedBox(width: 4),
                                     ] else ...[
-                                      const Icon(CupertinoIcons.arrow_2_circlepath, color: AppColors.primary, size: 12),
+                                      const Icon(LucideIcons.refreshCw, color: AppColors.primary, size: 12),
                                       const SizedBox(width: 4),
                                     ],
                                     const Text(
@@ -305,7 +306,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                                   color: AppColors.primary.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Icon(CupertinoIcons.sparkles, color: AppColors.primary, size: 20),
+                                child: const Icon(LucideIcons.sparkles, color: AppColors.primary, size: 20),
                               ),
                               const SizedBox(width: 14),
                               const Expanded(
@@ -329,7 +330,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                                   ],
                                 ),
                               ),
-                              const Icon(CupertinoIcons.chevron_right, color: AppColors.primary, size: 14),
+                              const Icon(LucideIcons.chevronRight, color: AppColors.primary, size: 14),
                             ],
                           ),
                         ),
@@ -349,7 +350,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                               const SizedBox(height: 14),
 
                               _buildPillarItem(
-                                CupertinoIcons.calendar,
+                                LucideIcons.calendarClock,
                                 'Pilar 1: Analisis Fundamental',
                                 _report!.fundamentalNotes ?? 'Tidak ada data fundamental spesifik.',
                                 AppColors.primary,
@@ -357,7 +358,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                               const Divider(height: 22, color: AppColors.borderSubtle),
 
                               _buildPillarItem(
-                                CupertinoIcons.globe,
+                                LucideIcons.globe,
                                 'Pilar 2: Sentimen Geopolitik',
                                 _report!.geopoliticalNotes ?? 'Tidak ada isu geopolitik mayor yang berdampak langsung.',
                                 AppColors.secondary,
@@ -365,7 +366,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                               const Divider(height: 22, color: AppColors.borderSubtle),
 
                               _buildPillarItem(
-                                CupertinoIcons.chart_bar_alt_fill,
+                                LucideIcons.chartCandlestick,
                                 'Pilar 3: Konfirmasi Teknikal',
                                 _report!.technicalNotes ?? 'Grafik harga menunjukkan pola konsolidasi.',
                                 AppColors.bullish,
@@ -454,7 +455,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                             children: [
                               const Row(
                                 children: [
-                                  Icon(CupertinoIcons.exclamationmark_triangle_fill, color: AppColors.impactHigh, size: 16),
+                                  Icon(LucideIcons.triangleAlert, color: AppColors.impactHigh, size: 16),
                                   SizedBox(width: 8),
                                   Text(
                                     'FAKTOR RISIKO PEMBATAL BIAS',
@@ -492,7 +493,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                             children: [
                               const Row(
                                 children: [
-                                  Icon(CupertinoIcons.checkmark_seal_fill, color: AppColors.primary, size: 16),
+                                  Icon(LucideIcons.badgeCheck, color: AppColors.primary, size: 16),
                                   SizedBox(width: 8),
                                   Text(
                                     'TRANSPARANSI DATA (TRACEABLE SOURCES)',
@@ -511,7 +512,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                                     child: Row(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        const Icon(CupertinoIcons.check_mark_circled_solid, color: AppColors.bullish, size: 14),
+                                        const Icon(LucideIcons.circleCheck, color: AppColors.bullish, size: 14),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(

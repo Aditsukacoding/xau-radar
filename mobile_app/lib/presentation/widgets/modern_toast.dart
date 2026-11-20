@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'dart:ui';
-import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 
@@ -17,7 +17,7 @@ class ModernToast {
       context: context,
       title: title,
       message: message,
-      icon: CupertinoIcons.checkmark_seal_fill,
+      icon: LucideIcons.badgeCheck,
       accentColor: const Color(0xFF10B981), // Emerald glow
       duration: duration,
     );
@@ -33,7 +33,7 @@ class ModernToast {
       context: context,
       title: title,
       message: message,
-      icon: CupertinoIcons.exclamationmark_triangle_fill,
+      icon: LucideIcons.triangleAlert,
       accentColor: const Color(0xFFEF4444), // Crimson glow
       duration: duration,
     );
@@ -49,7 +49,7 @@ class ModernToast {
       context: context,
       title: title,
       message: message,
-      icon: CupertinoIcons.sparkles,
+      icon: LucideIcons.sparkles,
       accentColor: AppColors.primary, // Gold #F59E0B glow
       duration: duration,
     );

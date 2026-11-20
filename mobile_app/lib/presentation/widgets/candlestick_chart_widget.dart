@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'dart:ui' as ui;
-import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/wib_date_time.dart';
@@ -344,7 +344,7 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            _showTradeSetupOverlay ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
+                            _showTradeSetupOverlay ? LucideIcons.circleCheck : LucideIcons.circle,
                             color: widget.tradeSetup!.action == 'BUY' ? AppColors.bullish : AppColors.bearish,
                             size: 13,
                           ),

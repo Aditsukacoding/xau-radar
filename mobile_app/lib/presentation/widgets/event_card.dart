@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/wib_date_time.dart';
 import '../../data/models/economic_event_model.dart';
@@ -43,7 +44,7 @@ class EventCard extends StatelessWidget {
       timeHint = 'Dirilis';
       statusColor = const Color(0xFF00E676);
       statusBg = const Color(0x2200E676);
-      statusIcon = CupertinoIcons.checkmark_alt_circle_fill;
+      statusIcon = LucideIcons.circleCheck;
     } else if (isUpcoming) {
       if (timeDiff.inHours < 1) {
         timeHint = 'dalam ${timeDiff.inMinutes}m lagi';
@@ -54,17 +55,17 @@ class EventCard extends StatelessWidget {
       }
       statusColor = AppColors.primary;
       statusBg = AppColors.primary.withValues(alpha: 0.12);
-      statusIcon = CupertinoIcons.clock;
+      statusIcon = LucideIcons.clock;
     } else if (isSpeechOrNonNumeric) {
       timeHint = 'Selesai (Pidato)';
       statusColor = AppColors.textMuted;
       statusBg = const Color(0x208E9BAE);
-      statusIcon = CupertinoIcons.mic_fill;
+      statusIcon = LucideIcons.mic;
     } else {
       timeHint = 'Menunggu Rilis';
       statusColor = const Color(0xFFFFB300);
       statusBg = const Color(0x22FFB300);
-      statusIcon = CupertinoIcons.hourglass;
+      statusIcon = LucideIcons.hourglass;
     }
 
     // Determine Aktual display text and style

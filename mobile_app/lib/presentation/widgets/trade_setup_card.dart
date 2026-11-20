@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/trade_setup_model.dart';
@@ -136,10 +137,10 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                   : (isStop ? AppColors.bearish : AppColors.cyan);
 
               final IconData statusIcon = isTp1
-                  ? CupertinoIcons.check_mark_circled_solid
+                  ? LucideIcons.circleCheck
                   : (isStop
-                      ? CupertinoIcons.exclamationmark_octagon_fill
-                      : CupertinoIcons.lock_shield_fill);
+                      ? LucideIcons.octagonAlert
+                      : LucideIcons.shieldCheck);
 
               return Container(
                 width: double.infinity,
@@ -247,7 +248,7 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                         const Expanded(
                           child: Row(
                             children: [
-                              Icon(CupertinoIcons.doc_text_search, color: AppColors.gold, size: 14),
+                              Icon(LucideIcons.fileSearch, color: AppColors.gold, size: 14),
                               SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -265,7 +266,7 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                           ),
                         ),
                         Icon(
-                          _isRationaleExpanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                          _isRationaleExpanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
                           color: AppColors.textMuted,
                           size: 13,
                         ),
@@ -300,7 +301,7 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(CupertinoIcons.exclamationmark_circle_fill, color: AppColors.bearish, size: 13),
+                                const Icon(LucideIcons.circleAlert, color: AppColors.bearish, size: 13),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
@@ -337,7 +338,7 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(CupertinoIcons.chart_bar_alt_fill, color: AppColors.gold, size: 14),
+                    Icon(LucideIcons.chartCandlestick, color: AppColors.gold, size: 14),
                     SizedBox(width: 7),
                     Text(
                       'Lihat Chart TradingView',
@@ -348,7 +349,7 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                       ),
                     ),
                     SizedBox(width: 4),
-                    Icon(CupertinoIcons.chevron_right, color: AppColors.gold, size: 12),
+                    Icon(LucideIcons.chevronRight, color: AppColors.gold, size: 12),
                   ],
                 ),
               ),

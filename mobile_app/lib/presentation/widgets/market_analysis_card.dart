@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/constants/app_colors.dart';
 import 'ios_glass_card.dart';
 
@@ -47,10 +48,10 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
         : (isBearish ? AppColors.bearish : AppColors.neutral);
 
     final IconData biasIcon = isBullish
-        ? CupertinoIcons.arrow_up_right_circle_fill
+        ? LucideIcons.trendingUp
         : (isBearish
-            ? CupertinoIcons.arrow_down_right_circle_fill
-            : CupertinoIcons.pause_circle_fill);
+            ? LucideIcons.trendingDown
+            : LucideIcons.circlePause);
 
     return IosGlassCard(
       borderRadius: 22,
@@ -137,7 +138,7 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
                     children: [
                       const Row(
                         children: [
-                          Icon(CupertinoIcons.arrow_down_to_line, size: 12, color: AppColors.bullish),
+                          Icon(LucideIcons.arrowDownToLine, size: 12, color: AppColors.bullish),
                           SizedBox(width: 4),
                           Text(
                             'SUPPORT DI CHART',
@@ -172,7 +173,7 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
                     children: [
                       const Row(
                         children: [
-                          Icon(CupertinoIcons.arrow_up_to_line, size: 12, color: AppColors.bearish),
+                          Icon(LucideIcons.arrowUpToLine, size: 12, color: AppColors.bearish),
                           SizedBox(width: 4),
                           Text(
                             'RESISTANCE DI CHART',
@@ -228,7 +229,7 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
                       const Expanded(
                         child: Row(
                           children: [
-                            Icon(CupertinoIcons.bolt_fill, color: AppColors.primary, size: 13),
+                            Icon(LucideIcons.zap, color: AppColors.primary, size: 13),
                             SizedBox(width: 6),
                             Expanded(
                               child: Text(
@@ -248,7 +249,7 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
                       ),
                       const SizedBox(width: 8),
                       Icon(
-                        _isExpanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                        _isExpanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
                         color: AppColors.textTertiary,
                         size: 13,
                       ),
@@ -275,7 +276,7 @@ class _MarketAnalysisCardState extends State<MarketAnalysisCard> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 12, color: AppColors.impactHigh),
+                        const Icon(LucideIcons.triangleAlert, size: 12, color: AppColors.impactHigh),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(

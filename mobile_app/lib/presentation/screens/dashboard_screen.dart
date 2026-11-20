@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
@@ -249,7 +250,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(CupertinoIcons.wifi_slash, color: AppColors.bearish, size: 44),
+              const Icon(LucideIcons.wifiOff, color: AppColors.bearish, size: 44),
               const SizedBox(height: 14),
               const Text(
                 'Tidak Dapat Terhubung ke Engine',
@@ -346,7 +347,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               border: Border.all(color: AppColors.gold.withValues(alpha: 0.28), width: 0.8),
                             ),
                             child: const Icon(
-                              CupertinoIcons.circle_grid_hex_fill,
+                              LucideIcons.coins,
                               color: AppColors.gold,
                               size: 20,
                             ),
@@ -463,7 +464,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              isPriceUp ? CupertinoIcons.arrow_up_right : CupertinoIcons.arrow_down_right,
+                              isPriceUp ? LucideIcons.arrowUpRight : LucideIcons.arrowDownRight,
                               color: priceTrendColor,
                               size: 12,
                             ),
@@ -550,7 +551,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       const Row(
                         children: [
-                          Icon(CupertinoIcons.sparkles, color: AppColors.gold, size: 15),
+                          Icon(LucideIcons.sparkles, color: AppColors.gold, size: 15),
                           SizedBox(width: 7),
                           Text(
                             'CORE AI BIAS ENGINE',
@@ -577,7 +578,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           child: _isSynthesizing
                               ? const CupertinoActivityIndicator(radius: 6.5, color: AppColors.gold)
-                              : const Icon(CupertinoIcons.arrow_2_circlepath, color: AppColors.gold, size: 14),
+                              : const Icon(LucideIcons.refreshCw, color: AppColors.gold, size: 14),
                         ),
                       ),
                     ],
@@ -671,7 +672,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        Icon(CupertinoIcons.chevron_right, color: AppColors.gold, size: 13),
+                        Icon(LucideIcons.chevronRight, color: AppColors.gold, size: 13),
                       ],
                     ),
                   ),
@@ -706,7 +707,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       const Row(
                         children: [
-                          Icon(CupertinoIcons.bolt_fill, color: AppColors.cyan, size: 14),
+                          Icon(LucideIcons.zap, color: AppColors.cyan, size: 14),
                           SizedBox(width: 7),
                           Text(
                             'QUICK INTRADAY NOTE',
@@ -777,7 +778,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 borderRadius: BorderRadius.circular(9),
                               ),
                               child: const Icon(
-                                CupertinoIcons.exclamationmark_triangle_fill,
+                                LucideIcons.triangleAlert,
                                 color: AppColors.impactHigh,
                                 size: 15,
                               ),
@@ -895,7 +896,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(CupertinoIcons.sparkles, color: Color(0xFF08090C), size: 15),
+                            Icon(LucideIcons.sparkles, color: Color(0xFF08090C), size: 15),
                             SizedBox(width: 7),
                             Text(
                               'Buka Skenario Pre-News (9 Langkah)',
@@ -956,7 +957,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             const Row(
                               children: [
-                                Icon(CupertinoIcons.globe, color: AppColors.gold, size: 14),
+                                Icon(LucideIcons.globe, color: AppColors.gold, size: 14),
                                 SizedBox(width: 7),
                                 Text(
                                   'BERITA GEOPOLITIK TERKINI',
@@ -1008,7 +1009,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                 ),
                                 SizedBox(width: 2),
-                                Icon(CupertinoIcons.chevron_right, color: AppColors.gold, size: 11),
+                                Icon(LucideIcons.chevronRight, color: AppColors.gold, size: 11),
                               ],
                             ),
                           ],

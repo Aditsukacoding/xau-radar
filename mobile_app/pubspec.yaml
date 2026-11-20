@@ -37,6 +37,7 @@ dependencies:
   http: ^1.6.0
   intl: ^0.20.3
   web: ^1.1.1
+  lucide_icons_flutter: ^4.0.3
 
 dev_dependencies:
   flutter_test:

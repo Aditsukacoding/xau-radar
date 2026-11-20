@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/constants/app_colors.dart';
 
 class BiasBadge extends StatelessWidget {
@@ -32,21 +33,21 @@ class BiasBadge extends StatelessWidget {
         bg = AppColors.bullishMuted;
         border = AppColors.bullish;
         textColor = AppColors.bullish;
-        icon = CupertinoIcons.arrow_up_right;
+        icon = LucideIcons.arrowUpRight;
         label = isLarge ? 'BULLISH BIAS$strengthSuffix' : 'BULLISH';
         break;
       case 'BEARISH':
         bg = AppColors.bearishMuted;
         border = AppColors.bearish;
         textColor = AppColors.bearish;
-        icon = CupertinoIcons.arrow_down_right;
+        icon = LucideIcons.arrowDownRight;
         label = isLarge ? 'BEARISH BIAS$strengthSuffix' : 'BEARISH';
         break;
       default:
         bg = AppColors.neutralMuted;
         border = AppColors.gold;
         textColor = AppColors.gold;
-        icon = CupertinoIcons.equal;
+        icon = LucideIcons.minus;
         label = isLarge ? 'NEUTRAL BIAS' : 'NETRAL';
     }
 

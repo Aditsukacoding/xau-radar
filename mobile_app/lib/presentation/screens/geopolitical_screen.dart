@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/api_service.dart';
@@ -176,7 +177,7 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
                       children: [
                         _isSyncing
                             ? const CupertinoActivityIndicator(radius: 6, color: AppColors.primary)
-                            : const Icon(CupertinoIcons.arrow_2_circlepath, size: 12, color: AppColors.primary),
+                            : const Icon(LucideIcons.refreshCw, size: 12, color: AppColors.primary),
                         const SizedBox(width: 5),
                         const Text(
                           'Sync',
@@ -228,7 +229,7 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(CupertinoIcons.exclamationmark_circle, color: AppColors.bearish, size: 36),
+                            const Icon(LucideIcons.circleAlert, color: AppColors.bearish, size: 36),
                             const SizedBox(height: 8),
                             Text('Gagal memuat: $_error', style: const TextStyle(color: AppColors.textMuted)),
                             const SizedBox(height: 12),

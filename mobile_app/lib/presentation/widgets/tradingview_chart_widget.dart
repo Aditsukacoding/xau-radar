@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import 'tradingview_embed.dart' as tv_embed;
@@ -88,7 +88,7 @@ class _TradingViewChartWidgetState extends State<TradingViewChartWidget> {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(CupertinoIcons.chart_bar_square, size: 13, color: AppColors.primary),
+                      Icon(LucideIcons.chartColumn, size: 13, color: AppColors.primary),
                       SizedBox(width: 5),
                       Text(
                         'XAU/USD',

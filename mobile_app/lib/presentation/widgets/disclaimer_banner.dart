@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/constants/app_colors.dart';
 
 class DisclaimerBanner extends StatelessWidget {
@@ -26,7 +27,7 @@ class DisclaimerBanner extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
-              CupertinoIcons.shield_lefthalf_fill,
+              LucideIcons.shield,
               color: AppColors.gold,
               size: 14,
             ),

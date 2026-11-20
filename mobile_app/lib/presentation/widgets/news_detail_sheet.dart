@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -278,7 +279,7 @@ class NewsDetailSheet extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(CupertinoIcons.sparkles, color: AppColors.primary, size: 13),
+                          const Icon(LucideIcons.sparkles, color: AppColors.primary, size: 13),
                           const SizedBox(width: 6),
                           Text(
                             explanation['category']!,
@@ -304,7 +305,7 @@ class NewsDetailSheet extends StatelessWidget {
                           border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.8),
                         ),
                         child: const Icon(
-                          CupertinoIcons.xmark,
+                          LucideIcons.x,
                           color: AppColors.textPrimary,
                           size: 14,
                         ),
@@ -353,7 +354,7 @@ class NewsDetailSheet extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(CupertinoIcons.antenna_radiowaves_left_right, color: AppColors.primary, size: 11),
+                                const Icon(LucideIcons.radio, color: AppColors.primary, size: 11),
                                 const SizedBox(width: 5),
                                 Text(
                                   article.source,
@@ -381,7 +382,7 @@ class NewsDetailSheet extends StatelessWidget {
                           const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(CupertinoIcons.clock, color: AppColors.textMuted, size: 11),
+                              Icon(LucideIcons.clock, color: AppColors.textMuted, size: 11),
                               SizedBox(width: 4),
                               Text(
                                 '2 mnt baca',
@@ -445,8 +446,8 @@ class NewsDetailSheet extends StatelessWidget {
                                     children: [
                                       Icon(
                                         isBullish
-                                            ? CupertinoIcons.arrow_up_right_circle_fill
-                                            : (isBearish ? CupertinoIcons.arrow_down_right_circle_fill : CupertinoIcons.equal_circle_fill),
+                                            ? LucideIcons.trendingUp
+                                            : (isBearish ? LucideIcons.trendingDown : LucideIcons.minus),
                                         color: sentimentColor,
                                         size: 13,
                                       ),
@@ -501,7 +502,7 @@ class NewsDetailSheet extends StatelessWidget {
                       const SizedBox(height: 18),
 
                       // Section: Rangkuman Berita
-                      _buildSectionHeader(CupertinoIcons.doc_plaintext, 'RANGKUMAN BERITA'),
+                      _buildSectionHeader(LucideIcons.fileText, 'RANGKUMAN BERITA'),
                       const SizedBox(height: 8),
                       Container(
                         width: double.infinity,
@@ -523,7 +524,7 @@ class NewsDetailSheet extends StatelessWidget {
                       const SizedBox(height: 16),
 
                       // Section: Analisis Dampak Pasar
-                      _buildSectionHeader(CupertinoIcons.bolt_fill, 'ANALISIS & RESPON PASAR'),
+                      _buildSectionHeader(LucideIcons.zap, 'ANALISIS & RESPON PASAR'),
                       const SizedBox(height: 8),
                       Container(
                         width: double.infinity,
@@ -550,7 +551,7 @@ class NewsDetailSheet extends StatelessWidget {
                       const SizedBox(height: 16),
 
                       // Section: Mekanisme Transmisi
-                      _buildSectionHeader(CupertinoIcons.arrow_right_arrow_left, 'MEKANISME TRANSMISI KE XAU/USD'),
+                      _buildSectionHeader(LucideIcons.arrowLeftRight, 'MEKANISME TRANSMISI KE XAU/USD'),
                       const SizedBox(height: 8),
                       Container(
                         width: double.infinity,
@@ -572,7 +573,7 @@ class NewsDetailSheet extends StatelessWidget {
                       const SizedBox(height: 16),
 
                       // Section: Panduan Trader
-                      _buildSectionHeader(CupertinoIcons.lightbulb_fill, 'PANDUAN TAKTIKAL TRADER'),
+                      _buildSectionHeader(LucideIcons.lightbulb, 'PANDUAN TAKTIKAL TRADER'),
                       const SizedBox(height: 8),
                       Container(
                         width: double.infinity,
@@ -590,7 +591,7 @@ class NewsDetailSheet extends StatelessWidget {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(CupertinoIcons.checkmark_shield_fill, color: AppColors.primary, size: 17),
+                            const Icon(LucideIcons.shieldCheck, color: AppColors.primary, size: 17),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
@@ -643,7 +644,7 @@ class NewsDetailSheet extends StatelessWidget {
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(CupertinoIcons.arrow_up_right_square, size: 16, color: Colors.black),
+                              Icon(LucideIcons.externalLink, size: 16, color: Colors.black),
                               SizedBox(width: 8),
                               Text(
                                 'Buka Sumber Asli',
@@ -669,7 +670,7 @@ class NewsDetailSheet extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         borderRadius: BorderRadius.circular(14),
                         onPressed: () => _copyLink(context),
-                        child: const Icon(CupertinoIcons.share, size: 16, color: AppColors.textPrimary),
+                        child: const Icon(LucideIcons.share2, size: 16, color: AppColors.textPrimary),
                       ),
                     ),
                   ],
