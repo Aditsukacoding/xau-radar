@@ -197,9 +197,38 @@ class MacroIntelligenceService:
                         "gold_impact": "NEUTRAL",
                         "gold_score": 0.0,
                         "comparison_note": (
-                            f"Sesuai konsensus: Actual {act_raw} ≈ {ref_label} {ref_raw} "
+                            f"Sesuai konsensus ({currency}): Actual {act_raw} ≈ {ref_label} {ref_raw} "
                             f"(dampak sudah priced-in → netral/whipsaw)"
                         ),
+                    }
+
+                cmp_sign = ">" if delta > 0 else "<"
+
+                # Non-USD Inflation (e.g., GBP/EUR/JPY CPI/PPI) creates a 2-channel tug-of-war on XAU/USD:
+                # 1) Hawkish BoE/ECB strengthens GBP/EUR (mildly softens DXY)
+                # 2) Global inflation heats up global bond yields (headwind for Gold)
+                # Therefore it is NEVER a "Strong Bullish Gold (Weak USD)" trigger — it is secondary/mixed!
+                is_inflation_metric = any(k in title.lower() for k in ("cpi", "pce", "ppi", "inflation", "price index"))
+                if currency != "USD" and is_inflation_metric:
+                    bank_map = {"GBP": "BoE", "EUR": "ECB", "JPY": "BoJ", "AUD": "RBA", "CAD": "BoC", "CHF": "SNB", "CNY": "PBoC"}
+                    bank = bank_map.get(currency, f"Bank Sentral {currency}")
+                    if delta > 0:
+                        note = (
+                            f"Data {currency} ({bank}): Actual {act_raw} > {ref_label} {ref_raw} → {currency} menguat "
+                            f"(sedikit tekan DXY), namun yield obligasi global ikut naik → dampak ke XAU campuran/sekunder"
+                        )
+                    else:
+                        note = (
+                            f"Data {currency} ({bank}): Actual {act_raw} < {ref_label} {ref_raw} → ekspektasi {bank} melunak "
+                            f"({currency} melemah vs USD, yield global melandai) → dampak ke XAU campuran/sekunder"
+                        )
+                    return {
+                        "is_released": True,
+                        "polarity": "SECONDARY_MIXED",
+                        "surprise_direction": "ABOVE" if delta > 0 else "BELOW",
+                        "gold_impact": "NEUTRAL",
+                        "gold_score": 0.0,
+                        "comparison_note": note,
                     }
 
                 higher_is_bullish = polarity == "HIGHER_BULLISH_GOLD"
@@ -208,15 +237,23 @@ class MacroIntelligenceService:
                 strength = min(0.95, 0.42 + min(abs(rel_dev), 0.35) * 1.5)
                 gold_score = round(raw_gold_dir * strength * impact_w * curr_w, 3)
 
-                is_strong = abs(rel_dev) >= 0.08 or (impact_lvl == "HIGH" and abs(rel_dev) >= 0.04)
+                # Only direct USD releases can qualify as STRONG triggers for XAU/USD
+                is_strong = (currency == "USD") and (abs(rel_dev) >= 0.08 or (impact_lvl == "HIGH" and abs(rel_dev) >= 0.04))
                 if raw_gold_dir > 0:
                     gold_impact = "STRONG_BULLISH_GOLD" if is_strong else "BULLISH_GOLD"
-                    eff_str = "USD melemah → Bullish XAU" if currency == "USD" else f"{currency} kuat (DXY turun) → Bullish XAU"
+                    eff_str = (
+                        "USD melemah → Bullish XAU"
+                        if currency == "USD"
+                        else f"Dampak sekunder: {currency} menguat (tekanan ringan DXY) → Bullish ringan XAU"
+                    )
                 else:
                     gold_impact = "STRONG_BEARISH_GOLD" if is_strong else "BEARISH_GOLD"
-                    eff_str = "USD & Yield menguat → Bearish XAU" if currency == "USD" else f"{currency} lemah (DXY naik) → Bearish XAU"
+                    eff_str = (
+                        "USD & Yield menguat → Bearish XAU"
+                        if currency == "USD"
+                        else f"Dampak sekunder: {currency} melemah (DXY menguat ringan) → Bearish ringan XAU"
+                    )
 
-                cmp_sign = ">" if delta > 0 else "<"
                 return {
                     "is_released": True,
                     "polarity": polarity,

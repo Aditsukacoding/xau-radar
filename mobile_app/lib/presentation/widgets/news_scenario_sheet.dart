@@ -121,24 +121,54 @@ class NewsScenarioSheet extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                             decoration: BoxDecoration(
-                              color: AppColors.impactHigh.withValues(alpha: 0.18),
+                              color: AppColors.gold.withValues(alpha: 0.16),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppColors.impactHigh.withValues(alpha: 0.4)),
+                              border: Border.all(color: AppColors.gold.withValues(alpha: 0.45)),
                             ),
-                            child: const Text(
-                              'NEWS INTELLIGENCE',
-                              style: TextStyle(
-                                color: AppColors.impactHigh,
+                            child: Text(
+                              data.currency.toUpperCase(),
+                              style: const TextStyle(
+                                color: AppColors.gold,
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w800,
-                                letterSpacing: 0.6,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: (data.actual != null && data.actual!.isNotEmpty)
+                                  ? AppColors.bullish.withValues(alpha: 0.16)
+                                  : AppColors.impactHigh.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: (data.actual != null && data.actual!.isNotEmpty)
+                                    ? AppColors.bullish.withValues(alpha: 0.4)
+                                    : AppColors.impactHigh.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Text(
+                              (data.actual != null && data.actual!.isNotEmpty) ? 'POST-NEWS ACTUAL' : 'PRE-NEWS',
+                              style: TextStyle(
+                                color: (data.actual != null && data.actual!.isNotEmpty)
+                                    ? AppColors.bullish
+                                    : AppColors.impactHigh,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            data.scheduledAtWib,
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                          Expanded(
+                            child: Text(
+                              data.scheduledAtWib,
+                              style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
@@ -179,7 +209,7 @@ class NewsScenarioSheet extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Event Key Numbers (Consensus vs Previous)
+                  // Event Key Numbers (Shows Actual if released + Consensus + Previous + XAU Bias clearly!)
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -187,14 +217,53 @@ class NewsScenarioSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.borderSubtle),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    child: Column(
                       children: [
-                        _buildStat('KONSENSUS PASAR', data.consensus, AppColors.primary),
-                        Container(width: 1, height: 32, color: AppColors.borderSubtle),
-                        _buildStat('ANGKA SEBELUMNYA', data.previous, AppColors.textSecondary),
-                        Container(width: 1, height: 32, color: AppColors.borderSubtle),
-                        _buildStat('BIAS & KEYAKINAN', '${data.bias} (${data.confidenceLevel})', biasColor),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            if (data.actual != null && data.actual!.isNotEmpty) ...[
+                              _buildStat('AKTUAL RILIS', data.actual!, AppColors.bullish),
+                              Container(width: 1, height: 32, color: AppColors.borderSubtle),
+                            ],
+                            _buildStat('KONSENSUS', data.consensus, AppColors.primary),
+                            Container(width: 1, height: 32, color: AppColors.borderSubtle),
+                            _buildStat('SEBELUMNYA', data.previous, AppColors.textSecondary),
+                            if (data.actual == null || data.actual!.isEmpty) ...[
+                              Container(width: 1, height: 32, color: AppColors.borderSubtle),
+                              _buildStat('BIAS XAU', '${data.bias} (${data.confidenceLevel})', biasColor),
+                            ],
+                          ],
+                        ),
+                        if (data.actual != null && data.actual!.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Container(height: 0.8, color: AppColors.borderSubtle),
+                          const SizedBox(height: 9),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                data.currency.toUpperCase() == 'USD'
+                                    ? 'BIAS XAU PASCA-RILIS'
+                                    : 'BIAS XAU SAAT INI (DATA ${data.currency} SEKUNDER)',
+                                style: const TextStyle(
+                                  color: AppColors.textMuted,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                              Text(
+                                '${data.bias} (${data.confidenceLevel})',
+                                style: TextStyle(
+                                  color: biasColor,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),

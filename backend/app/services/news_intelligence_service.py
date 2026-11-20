@@ -110,36 +110,33 @@ class NewsIntelligenceService:
     async def get_or_generate_scenario(
         db: Session,
         symbol: str = "XAUUSD",
-        target_event_title: Optional[str] = None
+        target_event_title: Optional[str] = None,
+        target_currency: Optional[str] = None,
     ) -> NewsIntelligenceResponse:
         """
-        Generates or retrieves deep institutional news scenario planning.
+        Generates or retrieves deep institutional news scenario planning (Pre-News & Post-News Actual synchronized).
         """
         symbol = symbol.upper()
         now_utc = datetime.now(timezone.utc)
         now_wib = datetime.now(WIB)
 
-        # 1. Locate Target High-Impact Event
+        # 1. Locate Target Event (respecting BOTH event_title AND currency so GBP CPI never collides with USD/CAD CPI!)
         event = None
+        curr_filter = target_currency.strip().upper() if target_currency and target_currency.strip() else None
         if target_event_title:
-            # First try exact title match (case-insensitive)
-            event = (
-                db.query(EconomicEvent)
-                .filter(EconomicEvent.event_title.ilike(target_event_title.strip()))
-                .order_by(EconomicEvent.scheduled_at.asc())
-                .first()
-            )
-            # Fallback to substring search if no exact match found
+            q = db.query(EconomicEvent).filter(EconomicEvent.event_title.ilike(target_event_title.strip()))
+            if curr_filter:
+                q = q.filter(EconomicEvent.currency == curr_filter)
+            # Prefer most recent / nearest event (desc scheduled_at so latest week's release is chosen!)
+            event = q.order_by(desc(EconomicEvent.scheduled_at)).first()
             if not event:
-                event = (
-                    db.query(EconomicEvent)
-                    .filter(EconomicEvent.event_title.ilike(f"%{target_event_title.strip()}%"))
-                    .order_by(EconomicEvent.scheduled_at.asc())
-                    .first()
-                )
+                q2 = db.query(EconomicEvent).filter(EconomicEvent.event_title.ilike(f"%{target_event_title.strip()}%"))
+                if curr_filter:
+                    q2 = q2.filter(EconomicEvent.currency == curr_filter)
+                event = q2.order_by(desc(EconomicEvent.scheduled_at)).first()
 
         if not event:
-            # Pick next high-impact event (prefer USD NFP, CPI, PCE, FOMC, etc.)
+            # Pick next high-impact USD event first (direct Gold catalyst)
             event = (
                 db.query(EconomicEvent)
                 .filter(
@@ -152,12 +149,37 @@ class NewsIntelligenceService:
             )
 
         # Fallback default target if calendar has no pending high impact
-        event_name = event.event_title if event else "US Non-Farm Payrolls (NFP)"
-        currency = event.currency if event else "USD"
+        event_name = event.event_title if event else (target_event_title or "US Non-Farm Payrolls (NFP)")
+        currency = event.currency if event else (curr_filter or "USD")
         sched_utc = event.scheduled_at.replace(tzinfo=timezone.utc) if event else (now_utc + timedelta(days=2))
         sched_wib = sched_utc.astimezone(WIB)
         consensus_val = event.forecast_value if (event and event.forecast_value) else "98K"
         previous_val = event.previous_value if (event and event.previous_value) else "162K"
+        actual_val = event.actual_value.strip() if (event and event.actual_value and event.actual_value.strip()) else None
+
+        # If event already passed but DB missed actual_value, sync live from TradingView right now!
+        if not actual_val and sched_utc <= now_utc:
+            try:
+                from app.services.tradingview_calendar_service import TradingViewCalendarService
+                tv_events = await TradingViewCalendarService.fetch_tradingview_events(days_back=7, days_ahead=2)
+                matched_act = TradingViewCalendarService.match_actual_for_event(
+                    currency=currency,
+                    title=event_name,
+                    scheduled_at=sched_utc,
+                    forecast=consensus_val,
+                    previous=previous_val,
+                    tv_events=tv_events,
+                )
+                if matched_act:
+                    actual_val = matched_act
+                    if event is not None:
+                        event.actual_value = matched_act
+                        try:
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+            except Exception as e:
+                logger.debug(f"[NewsIntelligence] Live actual sync check skipped: {e}")
 
         # 2. Get Live Market Price Snapshot & Live Intermarket (DXY, US10Y, WTI) concurrently
         import asyncio
@@ -218,7 +240,7 @@ class NewsIntelligenceService:
             "event_title": event_name,
             "currency": currency,
             "impact_level": event.impact_level if event else "HIGH",
-            "actual_value": event.actual_value if event else None,
+            "actual_value": actual_val,
             "forecast_value": consensus_val,
             "previous_value": previous_val,
         }
@@ -300,6 +322,46 @@ class NewsIntelligenceService:
         if geo_eval.get("summary"):
             dynamic_plan["geopolitical_summary"] = geo_eval["summary"]
 
+        # Currency-accurate Fundamental Summary & Post-News Actual Reconciliation (ZERO contradiction!)
+        bank_map = {
+            "USD": "The Fed (AS)",
+            "GBP": "Bank of England (BoE)",
+            "EUR": "Bank Sentral Eropa (ECB)",
+            "JPY": "Bank of Japan (BoJ)",
+            "AUD": "Reserve Bank of Australia (RBA)",
+            "CAD": "Bank of Canada (BoC)",
+            "CHF": "Swiss National Bank (SNB)",
+            "CNY": "Bank Sentral Tiongkok (PBoC)",
+        }
+        cb_name = bank_map.get(currency.upper(), f"Bank Sentral {currency}")
+        if currency.upper() != "USD":
+            if actual_val:
+                dynamic_plan["fundamental_summary"] = (
+                    f"[SUDAH DIRILIS • DATA {currency}] {event_name} dirilis di {actual_val} "
+                    f"(Konsensus {consensus_val}, Sebelumnya {previous_val}). {event_comparison_note}. "
+                    f"Catatan: Ini data kebijakan {cb_name}, bukan data AS — pengaruhnya ke XAU/USD bersifat "
+                    f"sekunder melalui kurs {currency}/DXY dan sentimen yield global, sementara arah utama emas tetap mengikuti USD & teknikal."
+                )
+            else:
+                dynamic_plan["fundamental_summary"] = (
+                    f"[DATA SEKUNDER {currency}] {event_name} merupakan indikator kunci bagi {cb_name} "
+                    f"(Konsensus {consensus_val} vs Sebelumnya {previous_val}). Pengaruhnya ke XAU/USD bersifat tidak langsung "
+                    f"melalui pergerakan {currency} terhadap Indeks Dolar (DXY) serta imbas ke yield obligasi global."
+                )
+        elif actual_val:
+            dynamic_plan["fundamental_summary"] = (
+                f"[SUDAH DIRILIS • DATA USD] {event_name} dirilis di {actual_val} "
+                f"(Konsensus {consensus_val}, Sebelumnya {previous_val}). {event_comparison_note}."
+            )
+            # When a direct USD actual surprise occurred, synchronize Scenario Bias with actual gold impact!
+            ev_imp = str(event_eval.get("gold_impact") or "NEUTRAL").upper()
+            if "BULLISH_GOLD" in ev_imp:
+                dynamic_plan["bias"] = "BULLISH"
+                dynamic_plan["confidence_level"] = "Tinggi" if "STRONG_" in ev_imp else "Sedang"
+            elif "BEARISH_GOLD" in ev_imp:
+                dynamic_plan["bias"] = "BEARISH"
+                dynamic_plan["confidence_level"] = "Tinggi" if "STRONG_" in ev_imp else "Sedang"
+
         # 7. If Claude or Gemini API key is present, invoke LLM with live dynamic payload
         if settings.ANTHROPIC_API_KEY or settings.GEMINI_API_KEY:
             try:
@@ -308,7 +370,7 @@ class NewsIntelligenceService:
                     "currency": currency,
                     "scheduled_at_wib": sched_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
                     "scheduled_at_utc": sched_utc.strftime("%Y-%m-%d %H:%M UTC"),
-                    "actual": event.actual_value if event else None,
+                    "actual": actual_val,
                     "consensus": consensus_val,
                     "previous": previous_val,
                     "numeric_comparison": event_comparison_note,
@@ -340,6 +402,7 @@ class NewsIntelligenceService:
                         currency=currency,
                         consensus_val=consensus_val,
                         previous_val=previous_val,
+                        actual_val=actual_val,
                         sched_wib_str=sched_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
                         sched_utc_str=sched_utc.strftime("%Y-%m-%d %H:%M UTC"),
                         curr_price=curr_price,
@@ -365,6 +428,7 @@ class NewsIntelligenceService:
             currency=currency,
             consensus_val=consensus_val,
             previous_val=previous_val,
+            actual_val=actual_val,
             sched_wib_str=sched_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
             sched_utc_str=sched_utc.strftime("%Y-%m-%d %H:%M UTC"),
             curr_price=curr_price,
@@ -470,6 +534,7 @@ class NewsIntelligenceService:
         pending_catalysts: List[Dict[str, str]],
         now_wib_str: str,
         dynamic_fallback_plan: Dict[str, Any],
+        actual_val: Optional[str] = None,
         intermarket_snapshot: Optional[Dict[str, Any]] = None,
         event_comparison_note: str = "",
         historical_eval: Optional[Dict[str, Any]] = None,
@@ -592,9 +657,11 @@ class NewsIntelligenceService:
         h_eval = historical_eval or {}
         return NewsIntelligenceResponse(
             symbol=symbol,
+            currency=currency,
             event_title=event_name,
             scheduled_at_wib=sched_wib_str,
             scheduled_at_utc=sched_utc_str,
+            actual=actual_val,
             consensus=consensus_val,
             previous=previous_val,
             market_regime=market_regime,

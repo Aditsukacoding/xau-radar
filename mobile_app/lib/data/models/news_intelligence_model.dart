@@ -131,9 +131,11 @@ class NewsScenarioModel {
 
 class NewsIntelligenceModel {
   final String symbol;
+  final String currency;
   final String eventTitle;
   final String scheduledAtWib;
   final String scheduledAtUtc;
+  final String? actual;
   final String consensus;
   final String previous;
   final String marketRegime;
@@ -162,9 +164,11 @@ class NewsIntelligenceModel {
 
   NewsIntelligenceModel({
     required this.symbol,
+    this.currency = 'USD',
     required this.eventTitle,
     required this.scheduledAtWib,
     required this.scheduledAtUtc,
+    this.actual,
     required this.consensus,
     required this.previous,
     required this.marketRegime,
@@ -197,9 +201,11 @@ class NewsIntelligenceModel {
     final rawHist = json['historical_reactions'];
     return NewsIntelligenceModel(
       symbol: json['symbol'] ?? 'XAUUSD',
+      currency: json['currency']?.toString() ?? 'USD',
       eventTitle: json['event_title'] ?? 'US Non-Farm Payrolls',
       scheduledAtWib: json['scheduled_at_wib'] ?? '',
       scheduledAtUtc: json['scheduled_at_utc'] ?? '',
+      actual: json['actual']?.toString(),
       consensus: json['consensus'] ?? '-',
       previous: json['previous'] ?? '-',
       marketRegime: json['market_regime'] ?? 'Transisi Makro',

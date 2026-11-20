@@ -13,9 +13,11 @@ class NewsScenarioItem(BaseModel):
 
 class NewsIntelligenceResponse(BaseModel):
     symbol: str = "XAUUSD"
+    currency: str = "USD"
     event_title: str
     scheduled_at_wib: str
     scheduled_at_utc: str
+    actual: Optional[str] = None
     consensus: str
     previous: str
     market_regime: str

@@ -82,10 +82,14 @@ class _FundamentalScreenState extends State<FundamentalScreen> {
     }
   }
 
-  Future<void> _openNewsScenario({String? eventTitle}) async {
+  Future<void> _openNewsScenario({String? eventTitle, String? currency}) async {
     setState(() => _isLoadingScenario = true);
     try {
-      final scenario = await _api.getNewsIntelligence(symbol: 'XAUUSD', eventTitle: eventTitle);
+      final scenario = await _api.getNewsIntelligence(
+        symbol: 'XAUUSD',
+        eventTitle: eventTitle,
+        currency: currency,
+      );
       if (mounted) {
         NewsScenarioSheet.show(context, scenario);
       }
@@ -371,7 +375,12 @@ class _FundamentalScreenState extends State<FundamentalScreen> {
                                 final isHigh = ev.impactLevel.toUpperCase() == 'HIGH';
                                 return EventCard(
                                   event: ev,
-                                  onTap: isHigh ? () => _openNewsScenario(eventTitle: ev.eventTitle) : null,
+                                  onTap: isHigh
+                                      ? () => _openNewsScenario(
+                                            eventTitle: ev.eventTitle,
+                                            currency: ev.currency,
+                                          )
+                                      : null,
                                 );
                               },
                             ),

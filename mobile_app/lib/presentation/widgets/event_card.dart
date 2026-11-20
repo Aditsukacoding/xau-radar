@@ -101,17 +101,24 @@ class EventCard extends StatelessWidget {
     String? goldVerdictText;
     Color goldVerdictColor = AppColors.gold;
     IconData goldVerdictIcon = LucideIcons.minus;
+    final isUsd = event.currency.toUpperCase() == 'USD';
     if (hasActual && (isGoldBullish || isGoldBearish || impUpper == 'NEUTRAL')) {
       if (isGoldBullish) {
-        goldVerdictText = isStrong ? 'Kejutan Kuat • Bullish XAU (USD Melemah)' : 'Dampak Aktual • Condong Bullish XAU';
+        goldVerdictText = isUsd
+            ? (isStrong ? 'Kejutan Kuat • Bullish XAU (USD Melemah)' : 'Dampak Aktual USD • Bullish XAU')
+            : 'Dampak Sekunder (${event.currency} Kuat) • Bullish Ringan XAU';
         goldVerdictColor = AppColors.bullish;
         goldVerdictIcon = LucideIcons.trendingUp;
       } else if (isGoldBearish) {
-        goldVerdictText = isStrong ? 'Kejutan Kuat • Bearish XAU (USD Menguat)' : 'Dampak Aktual • Condong Bearish XAU';
+        goldVerdictText = isUsd
+            ? (isStrong ? 'Kejutan Kuat • Bearish XAU (USD Menguat)' : 'Dampak Aktual USD • Bearish XAU')
+            : 'Dampak Sekunder (${event.currency} Lemah) • Bearish Ringan XAU';
         goldVerdictColor = AppColors.bearish;
         goldVerdictIcon = LucideIcons.trendingDown;
       } else {
-        goldVerdictText = 'Aktual Sesuai Konsensus • Dampak Netral / Whipsaw';
+        goldVerdictText = isUsd
+            ? 'Aktual Sesuai Konsensus • Dampak Netral / Whipsaw'
+            : 'Data ${event.currency} • Dampak Sekunder / Campuran ke XAU';
         goldVerdictColor = AppColors.gold;
         goldVerdictIcon = LucideIcons.minus;
       }

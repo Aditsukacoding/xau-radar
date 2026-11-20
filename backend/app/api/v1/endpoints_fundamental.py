@@ -7,15 +7,17 @@ from app.core.database import get_db
 from app.models.economic_event import EconomicEvent
 from app.providers import get_data_provider
 from app.services.tradingview_calendar_service import TradingViewCalendarService
+from app.services.macro_intelligence import MacroIntelligenceService
 
 router = APIRouter()
 
 
 def _ev_to_dict(ev: Dict[str, Any], idx: int) -> Dict[str, Any]:
-    """Convert raw provider event dict to API response dict."""
+    """Convert raw provider event dict to API response dict with accurate polarity evaluation."""
     sched: datetime = ev["scheduled_at"]
     if sched.tzinfo is None:
         sched = sched.replace(tzinfo=timezone.utc)
+    eval_res = MacroIntelligenceService.evaluate_economic_event_impact(ev)
     return {
         "id": idx,
         "external_id": ev.get("external_id"),
@@ -27,13 +29,13 @@ def _ev_to_dict(ev: Dict[str, Any], idx: int) -> Dict[str, Any]:
         "forecast_value": ev.get("forecast_value"),
         "previous_value": ev.get("previous_value"),
         "unit": ev.get("unit", ""),
-        "sentiment_impact": ev.get("sentiment_impact", "NEUTRAL"),
+        "sentiment_impact": eval_res["gold_impact"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def _orm_to_dict(ev: EconomicEvent, idx: int) -> Dict[str, Any]:
-    """Convert SQLAlchemy ORM object to API response dict (same shape)."""
+    """Convert SQLAlchemy ORM object to API response dict (same shape) with accurate polarity evaluation."""
     sched = ev.scheduled_at
     if sched is None:
         sched = datetime.now(timezone.utc)
@@ -42,6 +44,15 @@ def _orm_to_dict(ev: EconomicEvent, idx: int) -> Dict[str, Any]:
     created = ev.created_at
     if created and created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
+    ev_dict = {
+        "currency": ev.currency or "USD",
+        "event_title": ev.event_title or "",
+        "impact_level": ev.impact_level or "LOW",
+        "actual_value": ev.actual_value,
+        "forecast_value": ev.forecast_value,
+        "previous_value": ev.previous_value,
+    }
+    eval_res = MacroIntelligenceService.evaluate_economic_event_impact(ev_dict)
     return {
         "id": ev.id,
         "external_id": ev.external_id,
@@ -53,7 +64,7 @@ def _orm_to_dict(ev: EconomicEvent, idx: int) -> Dict[str, Any]:
         "forecast_value": ev.forecast_value,
         "previous_value": ev.previous_value,
         "unit": ev.unit or "",
-        "sentiment_impact": ev.sentiment_impact or "NEUTRAL",
+        "sentiment_impact": eval_res["gold_impact"],
         "created_at": (created.isoformat() if created else datetime.now(timezone.utc).isoformat()),
     }
 
@@ -86,6 +97,7 @@ async def _sync_ff_to_db(raw_events: list, db: Session):
                 ("forecast_value", ev.get("forecast_value")),
                 ("previous_value", ev.get("previous_value")),
                 ("impact_level", ev.get("impact_level")),
+                ("sentiment_impact", ev.get("sentiment_impact")),
             ]:
                 if new_val is not None and getattr(existing, field) != new_val:
                     setattr(existing, field, new_val)

@@ -13,6 +13,7 @@ router = APIRouter()
 async def get_latest_news_scenario(
     symbol: str = "XAUUSD",
     event_title: Optional[str] = Query(None, description="Judul event spesifik (misal: NFP, CPI, FOMC)"),
+    currency: Optional[str] = Query(None, description="Mata uang event (misal: USD, GBP, EUR)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -27,7 +28,8 @@ async def get_latest_news_scenario(
     return await NewsIntelligenceService.get_or_generate_scenario(
         db=db,
         symbol=symbol.upper(),
-        target_event_title=event_title
+        target_event_title=event_title,
+        target_currency=currency,
     )
 
 

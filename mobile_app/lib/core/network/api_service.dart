@@ -202,11 +202,20 @@ class ApiService {
   }
 
   // 13. News Intelligence & Scenario Planning (9-Step Institutional Model)
-  Future<NewsIntelligenceModel> getNewsIntelligence({String symbol = 'XAUUSD', String? eventTitle}) async {
-    String url = '$baseUrl/news-intelligence/latest/$symbol';
+  Future<NewsIntelligenceModel> getNewsIntelligence({
+    String symbol = 'XAUUSD',
+    String? eventTitle,
+    String? currency,
+  }) async {
+    final params = <String>[];
     if (eventTitle != null && eventTitle.isNotEmpty) {
-      url += '?event_title=${Uri.encodeComponent(eventTitle)}';
+      params.add('event_title=${Uri.encodeComponent(eventTitle)}');
     }
+    if (currency != null && currency.isNotEmpty) {
+      params.add('currency=${Uri.encodeComponent(currency)}');
+    }
+    final query = params.isNotEmpty ? '?${params.join('&')}' : '';
+    final url = '$baseUrl/news-intelligence/latest/$symbol$query';
     final response = await http.get(Uri.parse(url)).timeout(_defaultTimeout);
     if (response.statusCode == 200) {
       return NewsIntelligenceModel.fromJson(json.decode(response.body));
