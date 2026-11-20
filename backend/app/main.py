@@ -168,8 +168,11 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    from app.core.database import engine
-    return {"status": "healthy", "db_backend": engine.dialect.name}
+    from app.core.database import engine, DB_INIT_ERROR
+    res = {"status": "healthy", "db_backend": engine.dialect.name}
+    if DB_INIT_ERROR:
+        res["db_error"] = DB_INIT_ERROR
+    return res
 
 
 from fastapi import Request

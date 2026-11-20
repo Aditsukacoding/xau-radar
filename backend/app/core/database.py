@@ -1,52 +1,93 @@
+import os
+import ssl
+import logging
+import urllib.parse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
-import os
 
-# Ensure database URL is safe for serverless/read-only environments
-# (Preserve external PostgreSQL URLs like Neon/Supabase if configured via DATABASE_URL)
-db_url = (settings.DATABASE_URL or "").strip()
-# Handle accidental Neon CLI copy format: psql 'postgresql://...' or surrounding quotes
-if db_url.startswith("psql "):
-    db_url = db_url[5:].strip()
-db_url = db_url.strip("'\"")
+logger = logging.getLogger(__name__)
+DB_INIT_ERROR: str = ""
 
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+# Parse & normalize DATABASE_URL cleanly (supports SQLite, Neon, Supabase, standard PostgreSQL)
+raw_url = (settings.DATABASE_URL or "").strip()
+if raw_url.startswith("psql "):
+    raw_url = raw_url[5:].strip()
+raw_url = raw_url.strip("'\"")
 
-if not db_url:
-    db_url = "sqlite:////tmp/trading_analytics.db"
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql://", 1)
 
-if (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")) and db_url.startswith("sqlite"):
-    db_url = "sqlite:////tmp/trading_analytics.db"
+if not raw_url:
+    raw_url = "sqlite:////tmp/trading_analytics.db"
 
-if db_url.startswith("sqlite"):
-    db_path = db_url.replace("sqlite:///", "")
-    db_dir = os.path.dirname(db_path)
-    if db_dir and not os.path.exists(db_dir):
-        try:
-            os.makedirs(db_dir, exist_ok=True)
-        except OSError:
-            # Read-only filesystem (e.g. AWS Lambda / Vercel), fall back to /tmp
-            db_url = "sqlite:////tmp/trading_analytics.db"
-    engine = create_engine(
-        db_url,
-        connect_args={"check_same_thread": False},
-        echo=False,
-    )
-else:
-    # Permanent PostgreSQL (Neon / Supabase) — serverless-safe pooling & pre-ping
-    engine = create_engine(
-        db_url,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        pool_size=3,
-        max_overflow=5,
-        echo=False,
-    )
+if (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")) and raw_url.startswith("sqlite"):
+    raw_url = "sqlite:////tmp/trading_analytics.db"
 
+def _build_engine(db_url: str):
+    global DB_INIT_ERROR
+    if db_url.startswith("sqlite"):
+        db_path = db_url.replace("sqlite:///", "")
+        db_dir = os.path.dirname(db_path)
+        if db_dir and not os.path.exists(db_dir):
+            try:
+                os.makedirs(db_dir, exist_ok=True)
+            except OSError:
+                db_url = "sqlite:////tmp/trading_analytics.db"
+        return create_engine(
+            db_url,
+            connect_args={"check_same_thread": False},
+            echo=False,
+        )
+
+    # PostgreSQL via pure-Python pg8000 (zero C/libpq/glibc issues on Vercel Serverless!)
+    try:
+        parts = urllib.parse.urlsplit(db_url)
+        q_pairs = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+        ssl_requested = True
+        clean_q = []
+        for k, v in q_pairs:
+            kl = k.lower()
+            if kl == "sslmode":
+                if v.lower() == "disable":
+                    ssl_requested = False
+                continue
+            if kl in ("channel_binding", "options"):
+                continue
+            clean_q.append((k, v))
+
+        pg_url = urllib.parse.urlunsplit((
+            "postgresql+pg8000",
+            parts.netloc,
+            parts.path,
+            urllib.parse.urlencode(clean_q),
+            "",
+        ))
+        c_args = {}
+        if ssl_requested:
+            ssl_ctx = ssl.create_default_context()
+            c_args["ssl_context"] = ssl_ctx
+
+        return create_engine(
+            pg_url,
+            connect_args=c_args,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            pool_size=3,
+            max_overflow=5,
+            echo=False,
+        )
+    except Exception as e:
+        DB_INIT_ERROR = f"{type(e).__name__}: {str(e)[:180]}"
+        logger.error(f"[Database] PostgreSQL engine init failed ({DB_INIT_ERROR}), falling back to /tmp SQLite.")
+        return create_engine(
+            "sqlite:////tmp/trading_analytics.db",
+            connect_args={"check_same_thread": False},
+            echo=False,
+        )
+
+engine = _build_engine(raw_url)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 

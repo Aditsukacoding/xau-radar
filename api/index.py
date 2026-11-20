@@ -13,13 +13,30 @@ os.environ.setdefault("IS_WSGI", "true")
 os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("USE_MOCK_DATA", "false")
 
-from app.main import app as _app
+_IMPORT_ERROR = None
+try:
+    from app.main import app as _app
+except Exception as _e:
+    import traceback
+    _IMPORT_ERROR = traceback.format_exc()
+    _app = None
 
 async def app(scope, receive, send):
     """
     ASGI middleware for Vercel Serverless Function.
     Restores the exact original requested URL path passed via rewrite query parameter.
     """
+    if _app is None:
+        if scope.get("type") == "http":
+            import json
+            body = json.dumps({"error": "startup_import_failed", "trace": _IMPORT_ERROR[-1200:]}).encode("utf-8")
+            await send({
+                "type": "http.response.start",
+                "status": 500,
+                "headers": [(b"content-type", b"application/json")],
+            })
+            await send({"type": "http.response.body", "body": body})
+        return
     if scope.get("type") == "http":
         qs = scope.get("query_string", b"").decode("utf-8", "ignore")
         if "__path=" in qs:
