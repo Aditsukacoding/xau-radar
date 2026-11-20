@@ -375,8 +375,8 @@ class NewsIntelligenceService:
         sched_wib_id = MacroIntelligenceService.format_wib_id(sched_utc, with_day=True, with_year=True)
         now_wib_id = MacroIntelligenceService.format_wib_id(now_utc, with_day=True, with_year=True)
 
-        # 7. If Claude or Gemini API key is present, invoke LLM with live dynamic payload
-        if settings.ANTHROPIC_API_KEY or settings.GEMINI_API_KEY:
+        # 7. If Claude, Gemini, or OpenRouter API key is present, invoke LLM with live dynamic payload
+        if settings.ANTHROPIC_API_KEY or settings.GEMINI_API_KEY or settings.OPENROUTER_API_KEY:
             try:
                 context_payload = {
                     "event_title": event_name,
@@ -402,7 +402,7 @@ class NewsIntelligenceService:
                 try:
                     ai_res = await asyncio.wait_for(
                         NewsIntelligenceService._call_llm_with_prompt(user_msg),
-                        timeout=4.0
+                        timeout=8.0
                     )
                 except Exception as te:
                     logger.info(f"LLM call timed out or failed ({te}), using institutional dynamic model.")
@@ -505,7 +505,7 @@ class NewsIntelligenceService:
 
         if settings.GEMINI_API_KEY:
             import httpx
-            models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
+            models = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
             for model in models:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.GEMINI_API_KEY}"
                 body = {
@@ -518,16 +518,57 @@ class NewsIntelligenceService:
                     "generationConfig": {"temperature": 0.2, "response_mime_type": "application/json"}
                 }
                 try:
-                    async with httpx.AsyncClient(timeout=35.0) as client:
+                    async with httpx.AsyncClient(timeout=7.5) as client:
                         r = await client.post(url, json=body)
                         if r.status_code == 200:
                             text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                            if text.startswith("```json"): text = text[7:]
-                            if text.startswith("```"): text = text[3:]
-                            if text.endswith("```"): text = text[:-3]
+                            s_idx = text.find("{")
+                            e_idx = text.rfind("}")
+                            if s_idx != -1 and e_idx > s_idx:
+                                text = text[s_idx:e_idx + 1]
                             return json.loads(text.strip())
+                        elif r.status_code in (401, 403):
+                            break
                 except Exception as e:
                     logger.warning(f"Gemini model {model} failed in news intelligence: {e}")
+
+        if settings.OPENROUTER_API_KEY:
+            import httpx
+            or_url = "https://openrouter.ai/api/v1/chat/completions"
+            or_headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                "HTTP-Referer": "https://xau.ditzy.biz.id",
+                "X-Title": "XAUUSD RADAR - News Intelligence",
+            }
+            for model in ["google/gemini-2.5-flash", "deepseek/deepseek-chat-v3-0324:free"]:
+                try:
+                    async with httpx.AsyncClient(timeout=7.5) as client:
+                        r = await client.post(
+                            or_url,
+                            headers=or_headers,
+                            json={
+                                "model": model,
+                                "messages": [
+                                    {"role": "system", "content": NEWS_INTELLIGENCE_PROMPT_SYSTEM},
+                                    {"role": "user", "content": user_content},
+                                ],
+                                "temperature": 0.2,
+                                "max_tokens": 2048,
+                                "response_format": {"type": "json_object"},
+                            },
+                        )
+                        if r.status_code == 200:
+                            text = r.json()["choices"][0]["message"]["content"].strip()
+                            s_idx = text.find("{")
+                            e_idx = text.rfind("}")
+                            if s_idx != -1 and e_idx > s_idx:
+                                text = text[s_idx:e_idx + 1]
+                            return json.loads(text.strip())
+                        elif r.status_code == 401:
+                            break
+                except Exception as e:
+                    logger.warning(f"OpenRouter model {model} failed in news intelligence: {e}")
 
         return None
 

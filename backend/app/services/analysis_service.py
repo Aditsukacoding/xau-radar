@@ -320,7 +320,7 @@ class AnalysisService:
                 or not setup.get("zone_proof")
                 or not setup.get("counter_setup")
                 or int(setup.get("setup_quality_score", 0) or 0) <= 0
-                or (action in ("BUY", "SELL") and (risk_pips_val > 52.0 or risk_pips_val < 28.0 or tp1_pips_val < 55.0))
+                or (action in ("BUY", "SELL") and (risk_pips_val > 88.0 or risk_pips_val < 28.0 or tp1_pips_val < 55.0))
             ):
                 should_regenerate = True
                 reason = "Kalibrasi setup ke Key-Zone Sniper 7-TF (Zona Reaksi Asli, SL 30–50p, TP1 60p, & Bukti Zona)."

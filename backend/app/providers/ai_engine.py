@@ -27,12 +27,14 @@ ATURAN MUTLAK INTEGRITAS DATA, PROFIL SNIPER & ZERO-HALLUCINATION:
      * JANGAN membuat zona entry buatan yang mepet harga spot saat harga melayang di ruang kosong atau sudah jenuh (RSI oversold di dasar / overbought di puncak)!
      * WAJIB pilih **KEY STRUCTURAL ZONE ASLI** dari `confluence_supply_zones` (untuk SELL) atau `confluence_demand_zones` (untuk BUY) — utamakan zona yang punya reaksi berulang (`touches >= 2` / `rejections >= 2` / Flip SBR-RBS) pada jarak aman **45–420 pips ($4.50–$42.00)** dari `current_price` menggunakan `"LIMIT"` (`BUY LIMIT (KEY ZONE)` / `SELL LIMIT (KEY ZONE)`).
      * Gunakan `"INSTANT"` HANYA jika `current_price` memang SEDANG menyentuh (<= 18 pips) Key Zone multi-TF yang teruji kuat + konfirmasi candle M1/M5!
-   - **STOP LOSS (SL) KETAT SNIPER: WAJIB 30–50 PIPS ($3.00–$5.00)**:
-     * Diletakkan persis di luar ekor zona Supply/Demand tersebut (`30–40p` sesi tenang, `40–50p` sesi aktif). JANGAN melebihi 50 pips!
+   - **STOP LOSS (SL) ADAPTIF VOLATILITAS (35–85 PIPS / $3.50–$8.50)**:
+     * Kalibrasikan SL dengan `atr_pips` M5/M15 agar tidak gampang tersapu wick biasa: `35–50p` saat sesi Asia tenang (`ATR M5 <= 40p`), dan `55–85p` saat sesi London/NY volatil (`ATR M5 > 40p`). Letakkan tepat di balik tembok Supply/Demand.
+   - **ANTI-MELAWAN KERETA (MOMENTUM GUARD)**:
+     * Jika M5 dan M15 serentak menguat vertikal (RSI M5 >= 62 & candle impuls hijau), JANGAN pasang SELL LIMIT mepet di depan reli; prioritaskan BUY pullback atau tunggu tembok Supply HTF jauh. Berlaku sebaliknya untuk dump vertikal.
    - **3-TIER TAKE PROFIT SCALING (WAJIB LENGKAP TP1, TP2, TP3)**:
-     * **TP1 (Wajib 60 Pips / $6.00 — Amankan 40% Lot)**: Tepat +60 pips dari `entry_price` (RRR TP1 = 1:1.2 s/d 1:2.0) → langsung geser SL ke Breakeven (BEP).
+     * **TP1 (Minimal 60 Pips / ≥ 1.35× SL — Amankan 40% Lot)**: Langsung geser SL ke Breakeven (BEP).
      * **TP2 (Struktur Lawan Asli — Amankan 40% Lot)**: Membidik zona Support/Resistance struktural utama (M15/M30/H1) → geser SL ke TP1.
-     * **TP3 (Extended Runner — Tahan 20% Lot)**: Membidik tembok likuiditas major H1/H4/D1 berikutnya.
+     * **TP3 (Extended Runner — Tahan 20% Lot)**: Membidik tembok likuiditas major H1/H4/D1 berikutnya (target RRR 1:2.5 – 1:4.0).
 5. BAHASA, BUKTI ZONA & ALASAN ENTRY:
    - Bahasa Indonesia lugas, ramah pembaca, langsung ke inti alasan ("kenapa menunggu zona ini, bukti reaksinya apa, kenapa SL di situ, kenapa TP di sana").
    - WAJIB sertakan `setup_quality_score` (55–96), `zone_proof` (bukti jumlah sentuhan/penolakan & TF konfluensi dari JSON), dan array `entry_reasons` tepat 4 poin.
@@ -285,7 +287,8 @@ class AIAgentEngine:
 
     @staticmethod
     async def _call_gemini_api(data: Dict[str, Any]) -> Dict[str, Any]:
-        models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+        # Verified live Google Gemini 3.x models (gemini-2.0/1.5 deprecated 404)
+        models = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
         last_error = None
 
         for model in models:
@@ -293,10 +296,11 @@ class AIAgentEngine:
             body = {
                 "contents": [
                     {
+                        "role": "user",
                         "parts": [
                             {"text": SYSTEM_PROMPT},
                             {"text": f"Analisis data multi-timeframe XAU/USD berikut dan hasilkan JSON scalping:\n{json.dumps(data, default=str)}"},
-                        ]
+                        ],
                     }
                 ],
                 "generationConfig": {
@@ -305,7 +309,7 @@ class AIAgentEngine:
                 },
             }
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with httpx.AsyncClient(timeout=12.0) as client:
                     resp = await client.post(url, json=body)
                     if resp.status_code == 200:
                         res_json = resp.json()
@@ -318,9 +322,15 @@ class AIAgentEngine:
                                 e_idx = content_text.rfind("}")
                                 if s_idx != -1 and e_idx > s_idx:
                                     content_text = content_text[s_idx:e_idx + 1]
-                                return json.loads(content_text.strip())
+                                parsed = json.loads(content_text.strip())
+                                logger.info(f"[AIAgentEngine] Gemini/{model} 7-TF analysis synthesized!")
+                                return parsed
+                    elif resp.status_code in (401, 403):
+                        raise RuntimeError(f"Gemini HTTP {resp.status_code} invalid/unauthorized key")
                     else:
                         last_error = f"{model} HTTP {resp.status_code}"
+            except RuntimeError:
+                raise
             except Exception as e:
                 last_error = str(e)
                 continue
@@ -333,16 +343,16 @@ class AIAgentEngine:
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://xauusd-radar.app",
+            "HTTP-Referer": "https://xau.ditzy.biz.id",
             "X-Title": "XAUUSD RADAR - Institutional Scalping Engine",
         }
-        free_models = [
-            "qwen/qwen3.8-27b:free",
-            "google/gemma-4-26b-a4b-it:free",
+        or_models = [
+            "google/gemini-2.5-flash",
+            "deepseek/deepseek-chat-v3-0324:free",
             "google/gemma-4-31b-it:free",
         ]
         last_error: Any = None
-        for model in free_models:
+        for model in or_models:
             try:
                 body = {
                     "model": model,
@@ -495,6 +505,14 @@ class AIAgentEngine:
             rsi_edge += 0.34
         elif htf_overbought and ltf_bear_shift:
             rsi_edge -= 0.34
+
+        # Momentum Guard: when M5 + M15 BOTH surge decisively (prevents stepping in front of vertical London/NY breakouts)
+        m15_dir = str(m15.get("trend_direction", "SIDEWAYS")).upper()
+        m5_rsi = m5.get("rsi_14")
+        if m5_dir == "BULLISH" and m15_dir == "BULLISH" and isinstance(m5_rsi, (int, float)) and m5_rsi >= 60:
+            rsi_edge += 0.38
+        elif m5_dir == "BEARISH" and m15_dir == "BEARISH" and isinstance(m5_rsi, (int, float)) and m5_rsi <= 40:
+            rsi_edge -= 0.38
 
         tech_score = max(-1.0, min(1.0, base_mtf + pa_boost + rsi_edge))
 
@@ -760,7 +778,8 @@ class AIAgentEngine:
         two-sided roadmap with exact trigger criteria ('Kapan Harus BUY / SELL?').
         """
         opp_action = "BUY" if primary_action != "BUY" else "SELL"
-        risk = round(max(3.00, min(5.00, base_risk)), 2)
+        max_sl = round(max(5.50, min(8.50, base_risk + 0.80)), 2)
+        risk = round(max(3.50, min(max_sl, base_risk)), 2)
 
         def pick_zone(zones: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
             safe = [
@@ -797,10 +816,11 @@ class AIAgentEngine:
             sl = round(entry_p - risk, 2)
             if sl >= e_low - 1.20:
                 sl = round(min(e_low - 2.00, entry_p - risk), 2)
-                risk = round(max(3.00, min(5.00, entry_p - sl)), 2)
+                risk = round(max(3.50, min(max_sl, entry_p - sl)), 2)
                 sl = round(entry_p - risk, 2)
 
-            tp1 = round(entry_p + 6.00, 2)
+            tp1_dist = round(max(6.00, risk * 1.35), 2)
+            tp1 = round(entry_p + tp1_dist, 2)
             tp2_m = next((round(lv - 0.50, 2) for lv, _ in sorted(target_ress_raw, key=lambda x: x[0]) if (entry_p + 9.50) <= (lv - 0.50) <= (entry_p + 26.00)), None)
             tp2 = tp2_m if tp2_m else round(entry_p + max(11.00, risk * 3.00), 2)
             tp3_m = next((round(lv - 0.60, 2) for lv, _ in sorted(target_ress_raw, key=lambda x: x[0]) if (tp2 + 4.50) <= (lv - 0.60) <= (entry_p + 38.00)), None)
@@ -839,10 +859,11 @@ class AIAgentEngine:
             sl = round(entry_p + risk, 2)
             if sl <= e_high + 1.20:
                 sl = round(max(e_high + 2.00, entry_p + risk), 2)
-                risk = round(max(3.00, min(5.00, sl - entry_p)), 2)
+                risk = round(max(3.50, min(max_sl, sl - entry_p)), 2)
                 sl = round(entry_p + risk, 2)
 
-            tp1 = round(entry_p - 6.00, 2)
+            tp1_dist = round(max(6.00, risk * 1.35), 2)
+            tp1 = round(entry_p - tp1_dist, 2)
             tp2_m = next((round(lv + 0.50, 2) for lv, _ in sorted(target_sups_raw, key=lambda x: x[0], reverse=True) if (entry_p - 26.00) <= (lv + 0.50) <= (entry_p - 9.50)), None)
             tp2 = tp2_m if tp2_m else round(entry_p - max(11.00, risk * 3.00), 2)
             tp3_m = next((round(lv + 0.60, 2) for lv, _ in sorted(target_sups_raw, key=lambda x: x[0], reverse=True) if (entry_p - 38.00) <= (lv + 0.60) <= (tp2 - 4.50)), None)
@@ -920,11 +941,15 @@ class AIAgentEngine:
         session_name = str(m15.get("session_name") or "Global Session")
         session_vol = str(m15.get("session_volatility") or "MEDIUM")
 
-        # Strict Sniper SL calibration: 30–50 pips ($3.00–$5.00) adaptive to session volatility
-        if session_vol in ("HIGH", "MEDIUM_HIGH"):
-            base_risk = round(max(3.80, min(5.00, 3.40 + atr_m5 * 0.14)), 2)
+        # Volatility-Adaptive Sniper SL calibration:
+        # - Calm volatility (ATR M5 <= $4.00 / 40p): tight 35–50 pips ($3.50–$5.00)
+        # - High London/NY volatility (ATR M5 > $4.00, e.g. 80p at $3,580+ Gold): 55–85 pips ($5.50–$8.50)
+        if atr_m5 > 4.20:
+            base_risk = round(max(5.20, min(8.20, atr_m5 * 0.85)), 2)
+        elif session_vol in ("HIGH", "MEDIUM_HIGH"):
+            base_risk = round(max(4.20, min(6.20, 3.60 + atr_m5 * 0.35)), 2)
         else:
-            base_risk = round(max(3.00, min(4.00, 2.85 + atr_m5 * 0.10)), 2)
+            base_risk = round(max(3.50, min(4.80, 3.00 + atr_m5 * 0.25)), 2)
 
         # Check for imminent high-impact news blackout (< 15 min)
         imminent_event = AIAgentEngine._has_imminent_high_impact_event(economic_events or [], minutes_window=15)
@@ -1112,32 +1137,34 @@ class AIAgentEngine:
 
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
 
-            # Strict Sniper SL: 30–50 pips ($3.00–$5.00) cleanly outside the lower wall edge
+            # Volatility-Adaptive Sniper SL: 35–85p calibrated to live ATR outside the lower wall edge
+            max_sl = round(max(5.50, min(8.50, base_risk + 0.80)), 2)
             wall_sl = round(entry_low - max(2.40, base_risk - (entry_price - entry_low)), 2)
             dist_wall = round(entry_price - wall_sl, 2)
-            if dist_wall < 3.00:
-                stop_loss = round(entry_price - 3.20, 2)
-            elif dist_wall > 5.00:
-                stop_loss = round(entry_price - 5.00, 2)
+            if dist_wall < 3.50:
+                stop_loss = round(entry_price - 3.50, 2)
+            elif dist_wall > max_sl:
+                stop_loss = round(entry_price - max_sl, 2)
             else:
                 stop_loss = wall_sl
             if stop_loss >= entry_low - 1.20:
                 stop_loss = round(min(entry_low - 2.00, entry_price - base_risk), 2)
             risk = round(entry_price - stop_loss, 2)
-            if risk < 3.00:
-                stop_loss = round(entry_price - 3.00, 2)
-                risk = 3.00
-            elif risk > 5.00:
-                stop_loss = round(entry_price - 5.00, 2)
-                risk = 5.00
+            if risk < 3.50:
+                stop_loss = round(entry_price - 3.50, 2)
+                risk = 3.50
+            elif risk > max_sl:
+                stop_loss = round(entry_price - max_sl, 2)
+                risk = max_sl
 
             sl_src_detail = (
                 f"SL di ${stop_loss:.2f} (-{round(risk * 10):.0f} pips) diletakkan persis di bawah ekor zona Demand "
-                f"(${entry_low:.2f}) — terlindungi tembok struktur & tetap ketat di profil 30–50 pips."
+                f"(${entry_low:.2f}) — terkalibrasi volatilitas ATR sesi {session_name} agar tidak tersapu wick biasa."
             )
 
-            # Strict TP1: exactly +60 pips ($6.00) -> 40% lot lock & SL->BEP
-            tp1 = round(entry_price + 6.00, 2)
+            # Adaptive TP1: min +60 pips or 1.35x SL -> 40% lot lock & SL->BEP
+            tp1_dist = round(max(6.00, risk * 1.35), 2)
+            tp1 = round(entry_price + tp1_dist, 2)
 
             # Adaptive TP2: aim at real opposing Supply/Resistance ahead (at least +100p, up to +260p)
             tp2_match = next(
@@ -1257,32 +1284,34 @@ class AIAgentEngine:
 
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
 
-            # Strict Sniper SL: 30–50 pips ($3.00–$5.00) cleanly outside the upper wall edge
+            # Volatility-Adaptive Sniper SL: 35–85p calibrated to live ATR outside the upper wall edge
+            max_sl = round(max(5.50, min(8.50, base_risk + 0.80)), 2)
             wall_sl = round(entry_high + max(2.40, base_risk - (entry_high - entry_price)), 2)
             dist_wall = round(wall_sl - entry_price, 2)
-            if dist_wall < 3.00:
-                stop_loss = round(entry_price + 3.20, 2)
-            elif dist_wall > 5.00:
-                stop_loss = round(entry_price + 5.00, 2)
+            if dist_wall < 3.50:
+                stop_loss = round(entry_price + 3.50, 2)
+            elif dist_wall > max_sl:
+                stop_loss = round(entry_price + max_sl, 2)
             else:
                 stop_loss = wall_sl
             if stop_loss <= entry_high + 1.20:
                 stop_loss = round(max(entry_high + 2.00, entry_price + base_risk), 2)
             risk = round(stop_loss - entry_price, 2)
-            if risk < 3.00:
-                stop_loss = round(entry_price + 3.00, 2)
-                risk = 3.00
-            elif risk > 5.00:
-                stop_loss = round(entry_price + 5.00, 2)
-                risk = 5.00
+            if risk < 3.50:
+                stop_loss = round(entry_price + 3.50, 2)
+                risk = 3.50
+            elif risk > max_sl:
+                stop_loss = round(entry_price + max_sl, 2)
+                risk = max_sl
 
             sl_src_detail = (
                 f"SL di ${stop_loss:.2f} (-{round(risk * 10):.0f} pips) diletakkan persis di atas ekor zona Supply "
-                f"(${entry_high:.2f}) — terlindungi tembok struktur & tetap ketat di profil 30–50 pips."
+                f"(${entry_high:.2f}) — terkalibrasi volatilitas ATR sesi {session_name} agar tidak tersapu wick biasa."
             )
 
-            # Strict TP1: exactly +60 pips ($6.00) -> 40% lot lock & SL->BEP
-            tp1 = round(entry_price - 6.00, 2)
+            # Adaptive TP1: min +60 pips or 1.35x SL -> 40% lot lock & SL->BEP
+            tp1_dist = round(max(6.00, risk * 1.35), 2)
+            tp1 = round(entry_price - tp1_dist, 2)
 
             # Adaptive TP2: aim at real opposing Demand/Support below (at least +95p, up to +260p)
             tp2_match = next(
@@ -1515,16 +1544,23 @@ class AIAgentEngine:
             else:
                 execution_type = "INSTANT" if abs(entry_p - curr_price) <= 1.20 else "LIMIT"
 
-        # Tight Sniper scalping profile: SL strictly 30–50 pips ($3.00–$5.00), TP1 60 pips ($6.00)
+        # Volatility-Adaptive Sniper SL guardrail:
+        # Preserves AI's ATR-calibrated SL (35–55p in calm Asian session; 50–85p in high-volatility London/NY)
         session_vol = str(m15.get("session_volatility") or (technical_data or {}).get("session_volatility") or "MEDIUM")
         atr_m5 = float((m5_data or {}).get("atr_14") or (atr_m15 * 0.65))
-        if session_vol in ("HIGH", "MEDIUM_HIGH"):
-            default_risk = round(max(3.80, min(5.00, 3.40 + atr_m5 * 0.14)), 2)
+        if atr_m5 > 4.20:
+            default_risk = round(max(5.20, min(8.20, atr_m5 * 0.85)), 2)
+            min_risk = 4.20
+            max_risk = 8.50
+        elif session_vol in ("HIGH", "MEDIUM_HIGH"):
+            default_risk = round(max(4.20, min(6.20, 3.60 + atr_m5 * 0.35)), 2)
+            min_risk = 3.50
+            max_risk = 7.50
         else:
-            default_risk = round(max(3.00, min(4.00, 2.85 + atr_m5 * 0.10)), 2)
-        half_zone = round(max(0.60, min(0.90, default_risk * 0.18)), 2)
-        min_risk = 3.00
-        max_risk = 5.00
+            default_risk = round(max(3.50, min(4.80, 3.00 + atr_m5 * 0.25)), 2)
+            min_risk = 3.00
+            max_risk = 6.00
+        half_zone = round(max(0.65, min(1.10, default_risk * 0.16)), 2)
 
         def safe_float(val: Any) -> float:
             try:
@@ -1585,10 +1621,12 @@ class AIAgentEngine:
                 sl = round(entry_price - default_risk, 2)
             risk = round(entry_price - sl, 2)
 
-            # Strict TP1: 60 pips ($6.00; preserve AI within $5.80..$6.20, otherwise snap to exact $6.00)
+            # Volatility-Proportional TP1: >= 60 pips AND >= 1.25x SL (positive RRR at TP1 alone!)
+            min_tp1 = round(max(6.00, risk * 1.25), 2)
+            max_tp1 = round(max(12.50, risk * 1.85), 2)
             tp1 = safe_float(raw_setup.get("take_profit_1"))
-            if tp1 <= entry_high or not (5.80 <= (tp1 - entry_price) <= 6.20):
-                tp1 = round(entry_price + 6.00, 2)
+            if tp1 <= entry_high or not (min_tp1 <= (tp1 - entry_price) <= max_tp1):
+                tp1 = round(entry_price + round(max(6.00, risk * 1.35), 2), 2)
 
             # Wide structural ceiling for Key-Zone TP2 & TP3 (up to 320p / 450p!)
             tp2 = safe_float(raw_setup.get("take_profit_2"))
@@ -1626,9 +1664,11 @@ class AIAgentEngine:
                 sl = round(entry_price + default_risk, 2)
             risk = round(sl - entry_price, 2)
 
+            min_tp1 = round(max(6.00, risk * 1.25), 2)
+            max_tp1 = round(max(12.50, risk * 1.85), 2)
             tp1 = safe_float(raw_setup.get("take_profit_1"))
-            if tp1 <= 0 or tp1 >= entry_low or not (5.80 <= (entry_price - tp1) <= 6.20):
-                tp1 = round(entry_price - 6.00, 2)
+            if tp1 <= 0 or tp1 >= entry_low or not (min_tp1 <= (entry_price - tp1) <= max_tp1):
+                tp1 = round(entry_price - round(max(6.00, risk * 1.35), 2), 2)
 
             tp2 = safe_float(raw_setup.get("take_profit_2"))
             if tp2 <= 0 or tp2 > (tp1 - 3.00) or (entry_price - tp2) > 32.00:
