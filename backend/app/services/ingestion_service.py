@@ -212,8 +212,30 @@ class IngestionService:
         Returns count of newly ingested articles.
         """
         provider = get_data_provider()
-        raw_news = await provider.get_news_articles(symbol=symbol, limit=30)
+        raw_news = await provider.get_news_articles(symbol=symbol, limit=45)
         new_count = 0
+
+        # Prune legacy irrelevant articles (e.g. 'warning'/'warn' false positives before word-boundary filter)
+        try:
+            from app.providers.live_provider import LiveDataProvider
+            existing_rows = (
+                db.query(NewsArticle)
+                .filter(NewsArticle.symbol == symbol.upper())
+                .order_by(NewsArticle.published_at.desc())
+                .limit(80)
+                .all()
+            )
+            pruned = 0
+            for row in existing_rows:
+                if row.title and not LiveDataProvider._is_xau_relevant(row.title):
+                    db.delete(row)
+                    pruned += 1
+            if pruned > 0:
+                db.commit()
+                logger.info(f"Pruned {pruned} legacy off-topic news articles.")
+        except Exception:
+            db.rollback()
+
         for nw in raw_news:
             exists = db.query(NewsArticle).filter(
                 (NewsArticle.title == nw["title"]) | (NewsArticle.url == nw.get("url"))

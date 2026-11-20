@@ -144,7 +144,7 @@ class AnalysisService:
             db.query(NewsArticle)
             .filter(NewsArticle.symbol == symbol)
             .order_by(desc(NewsArticle.published_at))
-            .limit(20)
+            .limit(35)
             .all()
         )
         news_data = [

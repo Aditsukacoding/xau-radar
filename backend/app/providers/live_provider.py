@@ -1,5 +1,6 @@
 import logging
 import math
+import re
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -508,16 +509,10 @@ class LiveDataProvider(BaseDataProvider):
 
     async def get_news_articles(self, symbol: str = "XAUUSD", limit: int = 50) -> List[Dict[str, Any]]:
         """
-        Fetch authentic breaking news concurrently across 9 independent global providers:
-        1. Google News Multi-Stream RSS (Global Macro & Metals Aggregator)
-        2. Yahoo Finance REST News API (Wall Street & Commodities Wire)
-        3. ForexLive / InvestingLive (Live Interbank FX & Gold Desk Wire)
-        4. CNBC Finance & World News Wire (US Macro & Geopolitics)
-        5. Al Jazeera International Wire (Frontline Conflict & Middle East Geopolitics)
-        6. Investing.com Commodities Wire (Spot Metals & Energy Supply)
-        7. The Wall Street Journal (WSJ) Markets & World (Institutional Global Wire)
-        8. MarketWatch Real-Time Financial Wire (Dow Jones Macro & Yields)
-        9. BBC World News (International Diplomacy & Global Geopolitical Conflicts)
+        Fetch authentic breaking news concurrently across 13 independent global providers
+        (covering 18+ institutional publishers: Reuters, Bloomberg, Kitco, FXStreet, FXEmpire,
+        WSJ, Financial Times, CNBC, MarketWatch, ForexLive, Yahoo Finance GC=F, Investing.com,
+        OilPrice, Al Jazeera, The Guardian, BBC World, France24) with per-source diversity balancing.
         """
         client = self._get_client()
         articles_map: Dict[str, Dict[str, Any]] = {}
@@ -532,6 +527,10 @@ class LiveDataProvider(BaseDataProvider):
             self._fetch_wsj_news(client, symbol),
             self._fetch_marketwatch_news(client, symbol),
             self._fetch_bbc_news(client, symbol),
+            self._fetch_ft_news(client, symbol),
+            self._fetch_oilprice_news(client, symbol),
+            self._fetch_guardian_news(client, symbol),
+            self._fetch_france24_news(client, symbol),
         ]
 
         results = await asyncio.gather(*provider_tasks, return_exceptions=True)
@@ -545,30 +544,55 @@ class LiveDataProvider(BaseDataProvider):
         articles = list(articles_map.values())
         if articles:
             articles.sort(key=lambda x: x["published_at"], reverse=True)
-            return articles[:limit]
+            # Enforce per-source diversity cap (max 3 per publisher) so no single source dominates!
+            balanced: List[Dict[str, Any]] = []
+            overflow: List[Dict[str, Any]] = []
+            per_source_cnt: Dict[str, int] = {}
+            for art in articles:
+                src_key = str(art.get("source") or "Global Desk").strip().lower()
+                cnt = per_source_cnt.get(src_key, 0)
+                if cnt < 3:
+                    balanced.append(art)
+                    per_source_cnt[src_key] = cnt + 1
+                else:
+                    overflow.append(art)
+            final_list = (balanced + overflow)[:limit]
+            final_list.sort(key=lambda x: x["published_at"], reverse=True)
+            return final_list
         return []
 
-    @staticmethod
-    def _is_xau_relevant(text: str) -> bool:
+    _XAU_INCLUDE_RE = re.compile(
+        r"\b("
+        r"gold|xau|xauusd|bullion|precious metals?|spot gold|gold futures?|silver|"
+        r"fed|federal reserve|powell|fomc|interest rates?|rate cuts?|rate hikes?|"
+        r"central banks?|monetary policy|treasury|treasuries|yields?|u\.?s\.?\s*dollar|dollar|dxy|greenback|"
+        r"inflation|cpi|pce|ppi|nfp|nonfarm|non-farm|payrolls?|unemployment|jobless|gdp|recession|stagflation|"
+        r"safe-haven|safe haven|geopolitics?|geopolitical|war|wars|warfare|conflict|airstrikes?|missiles?|"
+        r"sanctions?|tariffs?|trade war|middle east|iran|israel|hormuz|gaza|ukraine|russia|nato|brics|"
+        r"crude oil|brent|wti|opec|oil prices?"
+        r")\b",
+        re.IGNORECASE,
+    )
+
+    _XAU_EXCLUDE_RE = re.compile(
+        r"\b("
+        r"mount fuji|climber|dividend|earnings call|quarterly results|ipo|box office|"
+        r"football|soccer|nba|nfl|tennis|celebrity|movie|netflix|spotify|iphone|android"
+        r")\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _is_xau_relevant(cls, text: str) -> bool:
         """
-        Filters news to strictly ensure only articles genuinely impacting XAU/USD,
-        precious metals, the US Dollar, the Fed, Treasury yields, inflation data,
-        or geopolitical safe-haven drivers are ingested. Eliminates unrelated single stocks.
+        Strict word-boundary relevance filter for XAU/USD:
+        eliminates substring false-positives (like 'warning'/'warn' matching 'war') and single-stock/lifestyle noise.
         """
-        keywords = [
-            # Direct Gold & Metals
-            "gold", "xau", "bullion", "precious metal", "spot gold", "gold future", "metals", "silver",
-            # Fed & US Monetary Policy (Primary Gold Drivers)
-            "fed", "federal reserve", "powell", "fomc", "interest rate", "rate cut", "rate hike",
-            "central bank", "monetary policy", "treasury", "yield", "dollar", "dxy", "greenback",
-            # Macro Catalysts
-            "inflation", "cpi", "pce", "ppi", "nfp", "nonfarm", "payroll", "unemployment", "gdp", "recession",
-            # Geopolitical Safe-Haven Drivers
-            "safe-haven", "safe haven", "geopolitic", "war", "conflict", "sanction", "tariff", "trade war",
-            "middle east", "iran", "israel", "hormuz", "ukraine", "russia", "china trade", "brics"
-        ]
-        t = text.lower()
-        return any(k in t for k in keywords)
+        if not text:
+            return False
+        if cls._XAU_EXCLUDE_RE.search(text):
+            return False
+        return bool(cls._XAU_INCLUDE_RE.search(text))
 
     @staticmethod
     def _parse_pub_date(date_str: Optional[str]) -> datetime:
@@ -597,21 +621,25 @@ class LiveDataProvider(BaseDataProvider):
 
     async def _fetch_google_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
         """
-        Provider 1: Google News Multi-Stream Targeted Wire
-        Aggregates global real-time wire from Kitco, FXStreet, Reuters, Bloomberg, FXEmpire, etc.
+        Provider 1: Google News Multi-Stream Institutional Wire (6 Targeted Streams)
+        Concurrently aggregates Reuters, Bloomberg, Kitco, FXStreet, FXEmpire, MarketWatch & global macro desks.
         """
         rss_feeds = [
             "https://news.google.com/rss/search?q=XAUUSD+OR+%22gold+price%22+OR+%22spot+gold%22+OR+%22gold+futures%22&hl=en-US&gl=US&ceid=US:en",
+            "https://news.google.com/rss/search?q=site:reuters.com+(gold+OR+Fed+OR+dollar+OR+yields+OR+inflation)&hl=en-US&gl=US&ceid=US:en",
+            "https://news.google.com/rss/search?q=site:bloomberg.com+(gold+OR+Fed+OR+Treasury+OR+geopolitics)&hl=en-US&gl=US&ceid=US:en",
+            "https://news.google.com/rss/search?q=(site:kitco.com+OR+site:fxstreet.com+OR+site:fxempire.com)+gold&hl=en-US&gl=US&ceid=US:en",
             "https://news.google.com/rss/search?q=%22Federal+Reserve%22+OR+%22US+dollar%22+OR+%22Treasury+yields%22+OR+%22inflation+data%22+gold&hl=en-US&gl=US&ceid=US:en",
             "https://news.google.com/rss/search?q=%22safe-haven%22+gold+OR+%22Middle+East%22+gold+OR+%22geopolitics%22+gold&hl=en-US&gl=US&ceid=US:en",
         ]
-        results = []
-        for url in rss_feeds:
+
+        async def fetch_one(url: str) -> List[Dict[str, Any]]:
+            out: List[Dict[str, Any]] = []
             try:
-                r = await client.get(url, timeout=5.0)
+                r = await client.get(url, timeout=4.5)
                 if r.status_code == 200:
                     root = ET.fromstring(r.text)
-                    for item in root.findall(".//item")[:15]:
+                    for item in root.findall(".//item")[:10]:
                         title_el = item.find("title")
                         if title_el is None or not title_el.text:
                             continue
@@ -620,7 +648,7 @@ class LiveDataProvider(BaseDataProvider):
                             title_part, source_part = full_title.rsplit(" - ", 1)
                         else:
                             title_part, source_part = full_title, "Global Desk"
-                        
+
                         if not self._is_xau_relevant(title_part):
                             continue
 
@@ -628,30 +656,35 @@ class LiveDataProvider(BaseDataProvider):
                         pub_time = self._parse_pub_date(pub_str)
                         link_el = item.find("link")
                         sent_label, sent_score = self._compute_sentiment(title_part)
-                        results.append({
+                        out.append({
                             "symbol": symbol.upper(),
                             "title": title_part.strip(),
                             "source": source_part.strip(),
                             "url": link_el.text if link_el is not None else "",
-                            "summary": f"Liputan langsung pasar emas dan kebijakan makroekonomi dari {source_part.strip()}.",
+                            "summary": f"Liputan langsung pasar emas, suku bunga, dan makroekonomi dari {source_part.strip()}.",
                             "sentiment_label": sent_label,
                             "sentiment_score": sent_score,
                             "published_at": pub_time,
                         })
             except Exception:
                 pass
+            return out
+
+        batches = await asyncio.gather(*[fetch_one(u) for u in rss_feeds], return_exceptions=True)
+        results: List[Dict[str, Any]] = []
+        for b in batches:
+            if isinstance(b, list):
+                results.extend(b)
         return results
 
     async def _fetch_yahoo_finance_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
-        """Provider 2: Yahoo Finance Official Gold & Macro News API"""
-        url = "https://query1.finance.yahoo.com/v1/finance/search?q=Gold&newsCount=15"
+        """Provider 2: Yahoo Finance Official Gold Search API + Dedicated GC=F RSS"""
         results = []
         try:
-            r = await client.get(url, timeout=5.0)
+            r = await client.get("https://query1.finance.yahoo.com/v1/finance/search?q=Gold&newsCount=15", timeout=4.5)
             if r.status_code == 200:
                 data = r.json()
-                news_items = data.get("news", [])
-                for n in news_items:
+                for n in data.get("news", []):
                     title = n.get("title", "").strip()
                     if not title or not self._is_xau_relevant(title):
                         continue
@@ -664,13 +697,42 @@ class LiveDataProvider(BaseDataProvider):
                         "title": title,
                         "source": publisher,
                         "url": n.get("link", ""),
-                        "summary": "Analisis pasar modal dan komoditas resmi dari portal Yahoo Finance Wall Street.",
+                        "summary": "Analisis pasar komoditas & logam mulia resmi dari meja Wall Street Yahoo Finance.",
                         "sentiment_label": sent_label,
                         "sentiment_score": sent_score,
                         "published_at": pub_time,
                     })
         except Exception as e:
             logger.warning(f"Yahoo Finance news fetch error: {e}")
+
+        # Dedicated GC=F Gold Futures RSS stream
+        try:
+            r2 = await client.get("https://feeds.finance.yahoo.com/rss/2.0/headline?s=GC=F&region=US&lang=en-US", timeout=4.5)
+            if r2.status_code == 200:
+                root = ET.fromstring(r2.text)
+                for item in root.findall(".//item")[:10]:
+                    title_el = item.find("title")
+                    if title_el is None or not title_el.text:
+                        continue
+                    title = title_el.text.strip()
+                    if not self._is_xau_relevant(title):
+                        continue
+                    pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
+                    pub_time = self._parse_pub_date(pub_str)
+                    link_el = item.find("link")
+                    sent_label, sent_score = self._compute_sentiment(title)
+                    results.append({
+                        "symbol": symbol.upper(),
+                        "title": title,
+                        "source": "Yahoo Finance",
+                        "url": link_el.text if link_el is not None else "",
+                        "summary": "Update langsung kontrak berjangka emas COMEX (GC=F) dari Yahoo Finance.",
+                        "sentiment_label": sent_label,
+                        "sentiment_score": sent_score,
+                        "published_at": pub_time,
+                    })
+        except Exception:
+            pass
         return results
 
     async def _fetch_forexlive_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
@@ -777,36 +839,40 @@ class LiveDataProvider(BaseDataProvider):
         return results
 
     async def _fetch_investing_com_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
-        """Provider 6: Investing.com Commodities Wire (Filtered for Metals & Macro)"""
-        url = "https://www.investing.com/rss/news_25.rss"
+        """Provider 6: Investing.com Forex & Economy Wires (Verified 200 OK feeds)"""
+        urls = [
+            "https://www.investing.com/rss/news_1.rss",
+            "https://www.investing.com/rss/news_14.rss",
+        ]
         results = []
-        try:
-            r = await client.get(url, timeout=5.0)
-            if r.status_code == 200:
-                root = ET.fromstring(r.text)
-                for item in root.findall(".//item")[:20]:
-                    title_el = item.find("title")
-                    if title_el is None or not title_el.text:
-                        continue
-                    title = title_el.text.strip()
-                    if not self._is_xau_relevant(title):
-                        continue
-                    pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
-                    pub_time = self._parse_pub_date(pub_str)
-                    link_el = item.find("link")
-                    sent_label, sent_score = self._compute_sentiment(title)
-                    results.append({
-                        "symbol": symbol.upper(),
-                        "title": title,
-                        "source": "Investing.com",
-                        "url": link_el.text if link_el is not None else "",
-                        "summary": "Perkembangan pasokan fisik komoditas, pasar minyak, dan pergerakan emas dari Investing.com.",
-                        "sentiment_label": sent_label,
-                        "sentiment_score": sent_score,
-                        "published_at": pub_time,
-                    })
-        except Exception as e:
-            logger.warning(f"Investing.com news fetch error: {e}")
+        for url in urls:
+            try:
+                r = await client.get(url, timeout=4.5)
+                if r.status_code == 200:
+                    root = ET.fromstring(r.text)
+                    for item in root.findall(".//item")[:15]:
+                        title_el = item.find("title")
+                        if title_el is None or not title_el.text:
+                            continue
+                        title = title_el.text.strip()
+                        if not self._is_xau_relevant(title):
+                            continue
+                        pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
+                        pub_time = self._parse_pub_date(pub_str)
+                        link_el = item.find("link")
+                        sent_label, sent_score = self._compute_sentiment(title)
+                        results.append({
+                            "symbol": symbol.upper(),
+                            "title": title,
+                            "source": "Investing.com",
+                            "url": link_el.text if link_el is not None else "",
+                            "summary": "Perkembangan pasar forex, ekonomi makro, dan komoditas emas dari Investing.com.",
+                            "sentiment_label": sent_label,
+                            "sentiment_score": sent_score,
+                            "published_at": pub_time,
+                        })
+            except Exception as e:
+                logger.warning(f"Investing.com news fetch error: {e}")
         return results
 
     async def _fetch_wsj_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
@@ -911,6 +977,86 @@ class LiveDataProvider(BaseDataProvider):
         except Exception as e:
             logger.warning(f"BBC news fetch error: {e}")
         return results
+
+    async def _fetch_rss_generic(
+        self,
+        client: httpx.AsyncClient,
+        symbol: str,
+        url: str,
+        source_name: str,
+        summary_text: str,
+        max_items: int = 18,
+    ) -> List[Dict[str, Any]]:
+        """Shared fast RSS parser for verified institutional macro, energy & geopolitics wires."""
+        results = []
+        try:
+            r = await client.get(url, timeout=4.5)
+            if r.status_code == 200:
+                root = ET.fromstring(r.text)
+                for item in root.findall(".//item")[:max_items]:
+                    title_el = item.find("title")
+                    if title_el is None or not title_el.text:
+                        continue
+                    title = title_el.text.strip()
+                    if not self._is_xau_relevant(title):
+                        continue
+                    pub_str = item.find("pubDate").text if item.find("pubDate") is not None else ""
+                    pub_time = self._parse_pub_date(pub_str)
+                    link_el = item.find("link")
+                    sent_label, sent_score = self._compute_sentiment(title)
+                    results.append({
+                        "symbol": symbol.upper(),
+                        "title": title,
+                        "source": source_name,
+                        "url": link_el.text if link_el is not None else "",
+                        "summary": summary_text,
+                        "sentiment_label": sent_label,
+                        "sentiment_score": sent_score,
+                        "published_at": pub_time,
+                    })
+        except Exception as e:
+            logger.warning(f"{source_name} news fetch error: {e}")
+        return results
+
+    async def _fetch_ft_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
+        """Provider 10: Financial Times (FT World) Institutional Macro & Geopolitics"""
+        return await self._fetch_rss_generic(
+            client,
+            symbol,
+            "https://www.ft.com/world?format=rss",
+            "Financial Times",
+            "Analisis makro global, bank sentral, dan dinamika geopolitik dari Financial Times.",
+        )
+
+    async def _fetch_oilprice_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
+        """Provider 11: OilPrice.com Energy, OPEC & Middle East Inflation Transmission"""
+        return await self._fetch_rss_generic(
+            client,
+            symbol,
+            "https://oilprice.com/rss/main",
+            "OilPrice.com",
+            "Dinamika minyak mentah, OPEC, dan jalur transmisi inflasi energi ke pasar emas (XAU/USD).",
+        )
+
+    async def _fetch_guardian_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
+        """Provider 12: The Guardian World Geopolitical Wire"""
+        return await self._fetch_rss_generic(
+            client,
+            symbol,
+            "https://www.theguardian.com/world/rss",
+            "The Guardian",
+            "Laporan konflik internasional, sanksi, dan sentimen geopolitik global dari The Guardian.",
+        )
+
+    async def _fetch_france24_news(self, client: httpx.AsyncClient, symbol: str) -> List[Dict[str, Any]]:
+        """Provider 13: France24 International Diplomacy & Middle East Crisis Wire"""
+        return await self._fetch_rss_generic(
+            client,
+            symbol,
+            "https://www.france24.com/en/rss",
+            "France24",
+            "Liputan diplomasi internasional dan ketegangan Timur Tengah/Eropa dari France24.",
+        )
 
     def _compute_sentiment(self, text: str) -> tuple[str, float]:
         """Context-aware, negation-safe financial and geopolitical sentiment analyzer for Gold (XAU/USD)."""

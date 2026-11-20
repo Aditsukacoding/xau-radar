@@ -280,12 +280,12 @@ class NewsIntelligenceService:
                 recent_events_dicts.extend(tv_past)
         hist_eval = MacroIntelligenceService.analyze_historical_news_reactions(recent_events_dicts, candles_list)
 
-        # 5. Fetch recent news headlines (up to 16) for time-decayed geopolitical & macro context
+        # 5. Fetch diverse multi-source news headlines (up to 30) for time-decayed geopolitical & macro context
         news_articles = (
             db.query(NewsArticle)
             .filter(NewsArticle.symbol == symbol)
             .order_by(desc(NewsArticle.published_at))
-            .limit(16)
+            .limit(30)
             .all()
         )
         news_dicts = [
@@ -298,6 +298,15 @@ class NewsIntelligenceService:
             }
             for n in news_articles
         ]
+        # Supplement with live multi-wire fetch if DB has fewer than 6 unique publishers
+        unique_db_srcs = {str(n.get("source") or "").strip().lower() for n in news_dicts if n.get("source")}
+        if len(unique_db_srcs) < 6:
+            try:
+                live_news = await provider.get_news_articles(symbol=symbol, limit=30)
+                if live_news:
+                    news_dicts.extend(live_news)
+            except Exception:
+                pass
         geo_eval = MacroIntelligenceService.analyze_geopolitical_and_macro_news(news_dicts, intermarket_snap)
 
         # 6. Dynamic Institutional Scenario Model (enriched with live Intermarket + Time-Decayed Geo + Historical)
@@ -416,6 +425,7 @@ class NewsIntelligenceService:
                         intermarket_snapshot=intermarket_snap,
                         event_comparison_note=event_comparison_note,
                         historical_eval=hist_eval,
+                        geo_eval=geo_eval,
                     )
             except Exception as e:
                 logger.warning(f"LLM News Intelligence failed, fallback to institutional model: {e}")
@@ -442,6 +452,7 @@ class NewsIntelligenceService:
             intermarket_snapshot=intermarket_snap,
             event_comparison_note=event_comparison_note,
             historical_eval=hist_eval,
+            geo_eval=geo_eval,
         )
 
     @staticmethod
@@ -538,6 +549,7 @@ class NewsIntelligenceService:
         intermarket_snapshot: Optional[Dict[str, Any]] = None,
         event_comparison_note: str = "",
         historical_eval: Optional[Dict[str, Any]] = None,
+        geo_eval: Optional[Dict[str, Any]] = None,
     ) -> NewsIntelligenceResponse:
         """
         Anti-Hallucination Guardrail & Sanitizer for News Intelligence:
@@ -655,6 +667,7 @@ class NewsIntelligenceService:
         )
 
         h_eval = historical_eval or {}
+        g_eval = geo_eval or {}
         return NewsIntelligenceResponse(
             symbol=symbol,
             currency=currency,
@@ -685,6 +698,8 @@ class NewsIntelligenceService:
             historical_reactions=h_eval.get("recent_reactions") or [],
             historical_summary=str(h_eval.get("summary") or ""),
             avg_historical_range_pips=float(h_eval.get("avg_release_range_pips") or 0.0),
+            news_highlights=g_eval.get("cross_source_highlights") or [],
+            news_sources_count=int(g_eval.get("sources_count") or 0),
             disclaimer=disclaimer,
             analyzed_at_wib=now_wib_str
         )

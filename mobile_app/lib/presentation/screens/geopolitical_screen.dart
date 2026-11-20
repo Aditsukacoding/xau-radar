@@ -187,16 +187,28 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
                       '  •  ',
                       style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                     ),
-                    const Flexible(
-                      child: Text(
-                        'Katalis Global XAU/USD',
-                        style: TextStyle(
-                          color: AppColors.textTertiary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    Flexible(
+                      child: Builder(
+                        builder: (_) {
+                          final uniqueSrcCount = _articles
+                              .map((a) => a.source.trim().toLowerCase())
+                              .where((s) => s.isNotEmpty)
+                              .toSet()
+                              .length;
+                          final label = uniqueSrcCount > 0
+                              ? '$uniqueSrcCount Sumber Global • XAU/USD'
+                              : '15+ Sumber Global • XAU/USD';
+                          return Text(
+                            label,
+                            style: const TextStyle(
+                              color: AppColors.textTertiary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          );
+                        },
                       ),
                     ),
                   ],

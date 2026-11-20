@@ -766,19 +766,19 @@ class MacroIntelligenceService:
         theme_counts: Dict[str, int] = {}
         bullish_drivers: List[str] = []
         bearish_drivers: List[str] = []
+        unique_sources: List[str] = []
+        scored_candidates: List[Dict[str, Any]] = []
 
-        for art in (news_articles or [])[:25]:
+        from app.providers.live_provider import LiveDataProvider
+        tier1_sources = (
+            "reuters", "bloomberg", "kitco", "fxstreet", "fxempire", "wall street journal",
+            "financial times", "cnbc", "forexlive", "oilprice", "al jazeera", "bbc", "guardian",
+            "marketwatch", "investing", "yahoo finance", "france24",
+        )
+
+        for art in (news_articles or [])[:40]:
             title = str(art.get("title") or "").strip()
-            if not title:
-                continue
-            # Filter out any legacy non-XAU single-stock headlines that might linger in old DB rows
-            t_low = title.lower()
-            if not any(k in t_low for k in (
-                "gold", "xau", "bullion", "silver", "metal", "fed", "powell", "fomc", "rate",
-                "dollar", "dxy", "yield", "treasury", "inflation", "cpi", "pce", "nfp", "payroll",
-                "jobs", "gdp", "recession", "war", "conflict", "iran", "israel", "middle east",
-                "ukraine", "russia", "tariff", "sanction", "geopolit", "safe-haven", "safe haven", "oil", "crude"
-            )):
+            if not title or not LiveDataProvider._is_xau_relevant(title):
                 continue
 
             pub = art.get("published_at")
@@ -808,17 +808,50 @@ class MacroIntelligenceService:
             lbl, smart_score, theme = cls.classify_news_sentiment_smart(title)
             theme_counts[theme] = theme_counts.get(theme, 0) + 1
 
-            # Geopolitik & The Fed headlines carry slightly stronger gold-catalyst weight
             theme_mult = 1.20 if theme in ("GEOPOLITIK", "THE_FED") else 1.0
             w = decay_w * theme_mult
             weighted_sum += smart_score * w
             weight_total += w
 
-            src = str(art.get("source") or "Wire")
-            if smart_score >= 0.25 and len(bullish_drivers) < 2:
+            src = str(art.get("source") or "Global Desk").strip()
+            if src not in unique_sources:
+                unique_sources.append(src)
+
+            src_low = src.lower()
+            is_tier1 = any(t in src_low for t in tier1_sources)
+            scored_candidates.append({
+                "title": title,
+                "source": src,
+                "theme": theme,
+                "sentiment": lbl,
+                "score": smart_score,
+                "age_hours": round(age_h, 1),
+                "_priority": (1.5 if is_tier1 else 0.7) * decay_w * (1.0 + abs(smart_score)),
+            })
+
+            if smart_score >= 0.25 and len(bullish_drivers) < 3:
                 bullish_drivers.append(f"[{theme}] {title} ({src})")
-            elif smart_score <= -0.25 and len(bearish_drivers) < 2:
+            elif smart_score <= -0.25 and len(bearish_drivers) < 3:
                 bearish_drivers.append(f"[{theme}] {title} ({src})")
+
+        # Pick 4 top headlines STRICTLY from 4 DIFFERENT publishers for genuine cross-source verification!
+        scored_candidates.sort(key=lambda x: x["_priority"], reverse=True)
+        cross_source_highlights: List[Dict[str, Any]] = []
+        seen_src_keys = set()
+        for cand in scored_candidates:
+            sk = cand["source"].lower()
+            if sk in seen_src_keys:
+                continue
+            seen_src_keys.add(sk)
+            cross_source_highlights.append({
+                "title": cand["title"],
+                "source": cand["source"],
+                "theme": cand["theme"],
+                "sentiment": cand["sentiment"],
+                "score": cand["score"],
+            })
+            if len(cross_source_highlights) >= 4:
+                break
 
         geo_score = round(weighted_sum / weight_total, 3) if weight_total > 0 else 0.0
 
@@ -842,19 +875,29 @@ class MacroIntelligenceService:
         dom_label = theme_labels.get(dominant_theme, dominant_theme)
         bias_txt = "mendukung Emas (Bullish)" if geo_score >= 0.15 else ("menekan Emas (Bearish)" if geo_score <= -0.15 else "cenderung berimbang (Netral)")
 
-        lead_headline = bullish_drivers[0] if (geo_score >= 0 and bullish_drivers) else (
-            bearish_drivers[0] if bearish_drivers else (bullish_drivers[0] if bullish_drivers else "")
-        )
-        summary = (
-            f"Narasi dominan ({fresh_count} berita segar <3 jam): {dom_label} {bias_txt}."
-            + (f" Sorotan utama: {lead_headline}." if lead_headline else "")
-        )
+        src_sample = ", ".join(unique_sources[:5])
+        src_extra = f" (+{len(unique_sources) - 5} lainnya)" if len(unique_sources) > 5 else ""
+        src_header = f"{len(unique_sources)} sumber global ({src_sample}{src_extra})" if unique_sources else "kantor berita global"
+
+        if cross_source_highlights:
+            top_pairs = " | ".join(
+                f"{h['title'][:78]} ({h['source']})" for h in cross_source_highlights[:2]
+            )
+            summary = (
+                f"Sintesis {fresh_count} berita segar dari {src_header}: narasi dominan {dom_label} {bias_txt}. "
+                f"Lintas sumber: {top_pairs}."
+            )
+        else:
+            summary = f"Sintesis berita dari {src_header}: narasi dominan {dom_label} {bias_txt}."
 
         return {
             "geo_score": geo_score,
             "dominant_theme": dominant_theme,
             "dominant_theme_label": dom_label,
             "fresh_count": fresh_count,
+            "unique_sources": unique_sources,
+            "sources_count": len(unique_sources),
+            "cross_source_highlights": cross_source_highlights,
             "bullish_drivers": bullish_drivers,
             "bearish_drivers": bearish_drivers,
             "summary": summary,

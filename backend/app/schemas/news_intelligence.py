@@ -41,5 +41,7 @@ class NewsIntelligenceResponse(BaseModel):
     historical_reactions: List[Dict[str, Any]] = []  # Real 1H XAU pip reactions on recent USD releases
     historical_summary: str = ""  # Summary of historical news impact & volatility benchmark
     avg_historical_range_pips: float = 0.0
+    news_highlights: List[Dict[str, Any]] = []  # Multi-source verified breaking headlines (distinct publishers)
+    news_sources_count: int = 0
     disclaimer: str
     analyzed_at_wib: str

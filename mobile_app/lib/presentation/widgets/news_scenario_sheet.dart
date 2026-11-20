@@ -329,21 +329,82 @@ class NewsScenarioSheet extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Icon(LucideIcons.link2, color: AppColors.primary, size: 12),
-                                  SizedBox(width: 5),
-                                  Text(
-                                    'JALUR TRANSMISI DAMPAK KE EMAS',
-                                    style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700),
+                                  const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(LucideIcons.link2, color: AppColors.primary, size: 12),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        'JALUR TRANSMISI DAMPAK KE EMAS',
+                                        style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700),
+                                      ),
+                                    ],
                                   ),
+                                  if (data.newsSourcesCount > 0)
+                                    Text(
+                                      '${data.newsSourcesCount} Sumber Global',
+                                      style: const TextStyle(color: AppColors.cyan, fontSize: 9.5, fontWeight: FontWeight.w700),
+                                    ),
                                 ],
                               ),
-                              const SizedBox(height: 5),
+                              const SizedBox(height: 6),
                               Text(
                                 data.geopoliticalSummary,
-                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, height: 1.4),
+                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, height: 1.42),
                               ),
+                              if (data.newsHighlights.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Container(height: 0.7, color: AppColors.borderSubtle),
+                                const SizedBox(height: 8),
+                                ...data.newsHighlights.take(4).map((nh) {
+                                  final sColor = nh.sentiment == 'POSITIVE'
+                                      ? AppColors.bullish
+                                      : (nh.sentiment == 'NEGATIVE' ? AppColors.bearish : AppColors.gold);
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 7),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          margin: const EdgeInsets.only(top: 5),
+                                          width: 5.5,
+                                          height: 5.5,
+                                          decoration: BoxDecoration(color: sColor, shape: BoxShape.circle),
+                                        ),
+                                        const SizedBox(width: 7),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                nh.title,
+                                                style: const TextStyle(
+                                                  color: AppColors.textPrimary,
+                                                  fontSize: 11.2,
+                                                  height: 1.35,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '${nh.source} • ${nh.theme.replaceAll('_', ' ')}',
+                                                style: TextStyle(
+                                                  color: sColor.withValues(alpha: 0.9),
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ],
                             ],
                           ),
                         ),

@@ -100,6 +100,32 @@ class HistoricalReactionItem {
   }
 }
 
+class NewsHighlightItem {
+  final String title;
+  final String source;
+  final String theme;
+  final String sentiment;
+  final double score;
+
+  NewsHighlightItem({
+    required this.title,
+    required this.source,
+    required this.theme,
+    required this.sentiment,
+    this.score = 0.0,
+  });
+
+  factory NewsHighlightItem.fromJson(Map<String, dynamic> json) {
+    return NewsHighlightItem(
+      title: json['title']?.toString() ?? '',
+      source: json['source']?.toString() ?? 'Global Desk',
+      theme: json['theme']?.toString() ?? 'MAKRO',
+      sentiment: json['sentiment']?.toString().toUpperCase() ?? 'NEUTRAL',
+      score: (json['score'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 class NewsScenarioModel {
   final String label;
   final String condition;
@@ -159,6 +185,8 @@ class NewsIntelligenceModel {
   final List<HistoricalReactionItem> historicalReactions;
   final String historicalSummary;
   final double avgHistoricalRangePips;
+  final List<NewsHighlightItem> newsHighlights;
+  final int newsSourcesCount;
   final String disclaimer;
   final String analyzedAtWib;
 
@@ -192,6 +220,8 @@ class NewsIntelligenceModel {
     this.historicalReactions = const [],
     this.historicalSummary = '',
     this.avgHistoricalRangePips = 0.0,
+    this.newsHighlights = const [],
+    this.newsSourcesCount = 0,
     required this.disclaimer,
     required this.analyzedAtWib,
   });
@@ -199,6 +229,7 @@ class NewsIntelligenceModel {
   factory NewsIntelligenceModel.fromJson(Map<String, dynamic> json) {
     final rawIntermarket = json['intermarket_snapshot'];
     final rawHist = json['historical_reactions'];
+    final rawHighlights = json['news_highlights'];
     return NewsIntelligenceModel(
       symbol: json['symbol'] ?? 'XAUUSD',
       currency: json['currency']?.toString() ?? 'USD',
@@ -251,6 +282,14 @@ class NewsIntelligenceModel {
           : const [],
       historicalSummary: json['historical_summary']?.toString() ?? '',
       avgHistoricalRangePips: (json['avg_historical_range_pips'] as num?)?.toDouble() ?? 0.0,
+      newsHighlights: rawHighlights is List
+          ? rawHighlights
+              .whereType<Map>()
+              .map((e) => NewsHighlightItem.fromJson(Map<String, dynamic>.from(e)))
+              .where((item) => item.title.isNotEmpty)
+              .toList()
+          : const [],
+      newsSourcesCount: (json['news_sources_count'] as num?)?.toInt() ?? 0,
       disclaimer: json['disclaimer'] ?? '',
       analyzedAtWib: json['analyzed_at_wib'] ?? '',
     );
