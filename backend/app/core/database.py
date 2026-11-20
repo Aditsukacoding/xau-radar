@@ -5,9 +5,17 @@ import os
 
 # Ensure database URL is safe for serverless/read-only environments
 # (Preserve external PostgreSQL URLs like Neon/Supabase if configured via DATABASE_URL)
-db_url = settings.DATABASE_URL
+db_url = (settings.DATABASE_URL or "").strip()
+# Handle accidental Neon CLI copy format: psql 'postgresql://...' or surrounding quotes
+if db_url.startswith("psql "):
+    db_url = db_url[5:].strip()
+db_url = db_url.strip("'\"")
+
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+if not db_url:
+    db_url = "sqlite:////tmp/trading_analytics.db"
 
 if (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")) and db_url.startswith("sqlite"):
     db_url = "sqlite:////tmp/trading_analytics.db"

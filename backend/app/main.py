@@ -168,7 +168,8 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    return {"status": "healthy"}
+    from app.core.database import engine
+    return {"status": "healthy", "db_backend": engine.dialect.name}
 
 
 from fastapi import Request
