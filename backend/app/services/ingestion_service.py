@@ -202,8 +202,8 @@ class IngestionService:
                     ))
         db.commit()
 
-        # 4. Generate Fresh Analysis with real-time data
-        return await AnalysisService.generate_fresh_analysis(db, symbol=symbol)
+        # 4. Evaluate live status WITHOUT overwriting a locked active/pending setup
+        return await AnalysisService.get_or_generate_analysis(db, symbol=symbol, force_refresh=False)
 
     @staticmethod
     async def ingest_latest_news(db: Session, symbol: str = "XAUUSD") -> int:

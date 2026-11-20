@@ -21,15 +21,21 @@ if db_url.startswith("sqlite"):
         except OSError:
             # Read-only filesystem (e.g. AWS Lambda / Vercel), fall back to /tmp
             db_url = "sqlite:////tmp/trading_analytics.db"
-    connect_args = {"check_same_thread": False}
+    engine = create_engine(
+        db_url,
+        connect_args={"check_same_thread": False},
+        echo=False,
+    )
 else:
-    connect_args = {}
-
-engine = create_engine(
-    db_url,
-    connect_args=connect_args,
-    echo=False
-)
+    # Permanent PostgreSQL (Neon / Supabase) — serverless-safe pooling & pre-ping
+    engine = create_engine(
+        db_url,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=3,
+        max_overflow=5,
+        echo=False,
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

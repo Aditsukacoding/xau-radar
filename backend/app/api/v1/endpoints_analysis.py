@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -43,29 +43,23 @@ def _format_report_response(report: AnalysisReport) -> AnalysisReportResponse:
 @router.get("/latest/{symbol}", response_model=AnalysisReportResponse)
 async def get_latest_analysis_report(symbol: str = "XAUUSD", db: Session = Depends(get_db)):
     """
-    Get the most recent synthesized market bias report for an instrument.
+    Get the active locked setup & market bias report for an instrument (strictly locked until SL/TP).
     """
     symbol = symbol.upper()
-    report = (
-        db.query(AnalysisReport)
-        .filter(AnalysisReport.symbol == symbol)
-        .order_by(desc(AnalysisReport.created_at))
-        .first()
-    )
-
-    if not report:
-        # Generate on the fly if none exists
-        report = await AnalysisService.generate_fresh_analysis(db, symbol=symbol)
-
+    report = await AnalysisService.get_or_generate_analysis(db, symbol=symbol, force_refresh=False)
     return _format_report_response(report)
 
 
 @router.post("/generate/{symbol}", response_model=AnalysisReportResponse)
-async def trigger_fresh_analysis(symbol: str = "XAUUSD", db: Session = Depends(get_db)):
+async def trigger_fresh_analysis(
+    symbol: str = "XAUUSD",
+    force: bool = Query(False, description="Set true only to manually override a locked setup"),
+    db: Session = Depends(get_db),
+):
     """
-    Trigger a fresh synthesis by querying current fundamental, geopolitical,
-    and technical data, and executing the AI analysis engine.
+    Checks live SL/TP progression on the locked setup. Only generates a brand-new setup if
+    the locked setup has hit SL/TP/Expired, or if force=true is explicitly requested.
     """
     symbol = symbol.upper()
-    report = await AnalysisService.generate_fresh_analysis(db, symbol=symbol)
+    report = await AnalysisService.get_or_generate_analysis(db, symbol=symbol, force_refresh=force)
     return _format_report_response(report)

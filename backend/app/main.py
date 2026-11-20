@@ -68,11 +68,11 @@ async def _background_auto_ingestion_loop():
                     await IngestionService.ingest_latest_calendar(db)
                     calendar_last_sync = now_ts
 
-                # Re-synthesize fresh AI market analysis if new articles arrived or every 5 cycles (~2.5 mins)
+                # Evaluate live SL/TP progression without overwriting an active/pending locked setup
                 cycle += 1
                 if new_articles > 0 or cycle % 5 == 0:
-                    await AnalysisService.generate_fresh_analysis(db, "XAUUSD")
-                    logger.info("[Auto-Ingestion] Fresh AI market bias synthesized from real-time feeds.")
+                    await AnalysisService.get_or_generate_analysis(db, "XAUUSD", force_refresh=False)
+                    logger.info("[Auto-Ingestion] Live setup lifecycle checked (locked until SL/TP).")
             finally:
                 db.close()
         except asyncio.CancelledError:
