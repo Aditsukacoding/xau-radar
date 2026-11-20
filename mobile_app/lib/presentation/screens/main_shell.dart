@@ -12,7 +12,6 @@ import 'dashboard_screen.dart';
 import 'fundamental_screen.dart';
 import 'geopolitical_screen.dart';
 import 'technical_screen.dart';
-import 'analysis_detail_screen.dart';
 import '../widgets/modern_toast.dart';
 
 class MainShell extends StatefulWidget {
@@ -208,7 +207,6 @@ class _MainShellState extends State<MainShell> {
       const FundamentalScreen(),
       const GeopoliticalScreen(),
       const TechnicalScreen(),
-      const AnalysisDetailScreen(),
     ];
 
     final wibTimeShort = _now.formatWibTime(withSeconds: false).replaceAll(' WIB', '');
@@ -393,7 +391,6 @@ class _IosTabBar extends StatelessWidget {
     _TabItem(icon: LucideIcons.calendarClock, label: 'Kalender'),
     _TabItem(icon: LucideIcons.newspaper, label: 'Berita'),
     _TabItem(icon: LucideIcons.chartCandlestick, label: 'Teknikal'),
-    _TabItem(icon: LucideIcons.sparkles, label: 'Sintesis'),
   ];
 
   @override

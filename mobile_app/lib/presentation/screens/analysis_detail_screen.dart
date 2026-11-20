@@ -16,7 +16,8 @@ import '../widgets/news_scenario_sheet.dart';
 import '../widgets/modern_toast.dart';
 
 class AnalysisDetailScreen extends StatefulWidget {
-  const AnalysisDetailScreen({super.key});
+  final bool showAppBar;
+  const AnalysisDetailScreen({super.key, this.showAppBar = false});
 
   @override
   State<AnalysisDetailScreen> createState() => _AnalysisDetailScreenState();
@@ -112,6 +113,29 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: widget.showAppBar
+          ? AppBar(
+              backgroundColor: const Color(0xF508090C),
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              leading: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(LucideIcons.chevronLeft, color: AppColors.textPrimary, size: 22),
+              ),
+              title: const Text(
+                'Rincian 3 Pilar & Risiko',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(0.8),
+                child: Container(height: 0.8, color: AppColors.border),
+              ),
+            )
+          : null,
       body: _isLoading
           ? const Center(child: CupertinoActivityIndicator(radius: 14, color: AppColors.primary))
           : _error != null

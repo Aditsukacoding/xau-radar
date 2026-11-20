@@ -18,6 +18,7 @@ import '../widgets/news_detail_sheet.dart';
 import '../widgets/trade_setup_card.dart';
 import '../widgets/news_scenario_sheet.dart';
 import '../widgets/modern_toast.dart';
+import 'analysis_detail_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Function(int)? onNavigateTab;
@@ -657,10 +658,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Clean Deep Link to Sintesis Tab
+                  // Clean Deep Link to 3-Pillar Detail Page
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () => widget.onNavigateTab?.call(4),
+                    onTap: () => Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        builder: (_) => const AnalysisDetailScreen(showAppBar: true),
+                      ),
+                    ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
