@@ -13,6 +13,7 @@ from app.models.price_candle import PriceCandle
 from app.providers import get_data_provider
 from app.providers.ai_engine import AIAgentEngine
 from app.services.technical_calc import TechnicalCalculator
+from app.services.macro_intelligence import MacroIntelligenceService
 from app.schemas.news_intelligence import NewsIntelligenceResponse, NewsScenarioItem
 
 logger = logging.getLogger(__name__)
@@ -158,12 +159,16 @@ class NewsIntelligenceService:
         consensus_val = event.forecast_value if (event and event.forecast_value) else "98K"
         previous_val = event.previous_value if (event and event.previous_value) else "162K"
 
-        # 2. Get Live Market Price Snapshot
+        # 2. Get Live Market Price Snapshot & Live Intermarket (DXY, US10Y, WTI) concurrently
+        import asyncio
         provider = get_data_provider()
-        price_snapshot = await provider.get_latest_price(symbol)
+        price_snapshot, intermarket_snap = await asyncio.gather(
+            provider.get_latest_price(symbol),
+            MacroIntelligenceService.fetch_intermarket_snapshot(),
+        )
         curr_price = price_snapshot.get("current_price", 4198.50)
 
-        # 3. Get Technical Candlestick Levels
+        # 3. Get Technical Candlestick Levels (ensure rich 1H history for Historical News Reaction tracking)
         candles_h1 = (
             db.query(PriceCandle)
             .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == "1h")
@@ -174,15 +179,32 @@ class NewsIntelligenceService:
             {"open": c.open, "high": c.high, "low": c.low, "close": c.close, "volume": c.volume, "timestamp": c.timestamp}
             for c in candles_h1
         ]
+        # Ensure 1H candles are fresh (covering recent 14 days!) for authentic Historical News Reaction matching
+        is_h1_stale = True
+        if candles_list:
+            last_ts = candles_list[-1]["timestamp"]
+            if isinstance(last_ts, datetime):
+                if last_ts.tzinfo is None:
+                    last_ts = last_ts.replace(tzinfo=timezone.utc)
+                if (now_utc - last_ts).total_seconds() < 7200 and len(candles_list) >= 120:
+                    is_h1_stale = False
+        if is_h1_stale:
+            try:
+                live_h1 = await provider.get_candles(symbol, "1h", count=240)
+                if live_h1 and len(live_h1) >= 20:
+                    candles_list = live_h1
+            except Exception:
+                pass
+
         tech_data = TechnicalCalculator.calculate_indicators(candles_list) if candles_list else {}
-        supports = tech_data.get("support_levels", [round(curr_price - 28.0, 1), 4112.0])
-        resistances = tech_data.get("resistance_levels", [round(curr_price + 26.0, 1), 4250.0])
+        supports = tech_data.get("support_levels", [round(curr_price - 28.0, 1), round(curr_price - 55.0, 1)])
+        resistances = tech_data.get("resistance_levels", [round(curr_price + 26.0, 1), round(curr_price + 55.0, 1)])
 
         sup1 = supports[0] if supports else round(curr_price - 25.0, 1)
         sup2 = supports[1] if len(supports) > 1 else round(curr_price - 60.0, 1)
         res1 = resistances[0] if resistances else round(curr_price + 25.0, 1)
         res2 = resistances[1] if len(resistances) > 1 else round(curr_price + 55.0, 1)
-        trend = tech_data.get("trend", "BEARISH") if tech_data else "BEARISH"
+        trend = tech_data.get("trend_direction", "BEARISH") if tech_data else "BEARISH"
 
         # 4. Fetch smart upcoming catalysts tailored specifically to this event's theme from SQLite DB
         pending_catalysts = NewsIntelligenceService._get_smart_pending_catalysts(
@@ -191,16 +213,72 @@ class NewsIntelligenceService:
             now_utc=now_utc
         )
 
-        # 5. Fetch recent news headlines for dynamic macro context
+        # 4b. Evaluate Numeric Actual vs Forecast Comparison + Historical News Reactions (14 days)
+        target_ev_dict = {
+            "event_title": event_name,
+            "currency": currency,
+            "impact_level": event.impact_level if event else "HIGH",
+            "actual_value": event.actual_value if event else None,
+            "forecast_value": consensus_val,
+            "previous_value": previous_val,
+        }
+        event_eval = MacroIntelligenceService.evaluate_economic_event_impact(target_ev_dict)
+        event_comparison_note = event_eval["comparison_note"]
+
+        recent_events_db = (
+            db.query(EconomicEvent)
+            .filter(
+                EconomicEvent.scheduled_at >= (now_utc - timedelta(days=21)),
+                EconomicEvent.scheduled_at <= now_utc,
+            )
+            .order_by(desc(EconomicEvent.scheduled_at))
+            .limit(40)
+            .all()
+        )
+        recent_events_dicts = [
+            {
+                "currency": e.currency,
+                "event_title": e.event_title,
+                "impact_level": e.impact_level,
+                "scheduled_at": e.scheduled_at,
+                "actual_value": e.actual_value,
+                "forecast_value": e.forecast_value,
+                "previous_value": e.previous_value,
+            }
+            for e in recent_events_db
+        ]
+        # Supplement with live TradingView 14-day released US events if DB lacks past actuals (cold serverless DB)
+        released_usd_cnt = sum(
+            1 for e in recent_events_dicts
+            if str(e.get("currency", "")).upper() == "USD" and e.get("actual_value")
+        )
+        if released_usd_cnt < 3:
+            tv_past = await MacroIntelligenceService.fetch_recent_released_usd_events(days_back=14)
+            if tv_past:
+                recent_events_dicts.extend(tv_past)
+        hist_eval = MacroIntelligenceService.analyze_historical_news_reactions(recent_events_dicts, candles_list)
+
+        # 5. Fetch recent news headlines (up to 16) for time-decayed geopolitical & macro context
         news_articles = (
             db.query(NewsArticle)
             .filter(NewsArticle.symbol == symbol)
             .order_by(desc(NewsArticle.published_at))
-            .limit(4)
+            .limit(16)
             .all()
         )
+        news_dicts = [
+            {
+                "title": n.title,
+                "source": n.source,
+                "sentiment_label": n.sentiment_label,
+                "sentiment_score": n.sentiment_score,
+                "published_at": n.published_at,
+            }
+            for n in news_articles
+        ]
+        geo_eval = MacroIntelligenceService.analyze_geopolitical_and_macro_news(news_dicts, intermarket_snap)
 
-        # 6. Dynamic Institutional Scenario Model (Quantitative anchor & fail-safe fallback)
+        # 6. Dynamic Institutional Scenario Model (enriched with live Intermarket + Time-Decayed Geo + Historical)
         dynamic_plan = NewsIntelligenceService._build_dynamic_scenarios(
             event_name=event_name,
             currency=currency,
@@ -213,6 +291,14 @@ class NewsIntelligenceService:
             res2=res2,
             trend=trend
         )
+        if intermarket_snap and intermarket_snap.get("market_regime"):
+            dynamic_plan["market_regime"] = intermarket_snap["market_regime"]
+            dynamic_plan["market_regime_evidence"] = (
+                f"Live Intermarket ({intermarket_snap.get('updated_at_wib', '')}): "
+                f"{intermarket_snap['market_regime_evidence']}. {event_comparison_note}."
+            )
+        if geo_eval.get("summary"):
+            dynamic_plan["geopolitical_summary"] = geo_eval["summary"]
 
         # 7. If Claude or Gemini API key is present, invoke LLM with live dynamic payload
         if settings.ANTHROPIC_API_KEY or settings.GEMINI_API_KEY:
@@ -222,19 +308,23 @@ class NewsIntelligenceService:
                     "currency": currency,
                     "scheduled_at_wib": sched_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
                     "scheduled_at_utc": sched_utc.strftime("%Y-%m-%d %H:%M UTC"),
+                    "actual": event.actual_value if event else None,
                     "consensus": consensus_val,
                     "previous": previous_val,
+                    "numeric_comparison": event_comparison_note,
                     "current_price": curr_price,
+                    "intermarket_live": intermarket_snap,
+                    "historical_market_reactions": hist_eval,
+                    "geopolitical_intelligence": geo_eval,
                     "key_support_levels": [sup1, sup2],
                     "key_resistance_levels": [res1, res2],
                     "technical_trend": trend,
-                    "recent_news_context": [n.title for n in news_articles] if news_articles else [],
+                    "recent_news_context": [n.title for n in news_articles[:6]] if news_articles else [],
                     "verified_upcoming_catalysts": [f"{c['time_wib']} - {c['event']}" for c in pending_catalysts[:5]]
                 }
                 user_msg = f"Buat analisis skenario berita mendalam berdasarkan metodologi 9 langkah dan integritas data:\n{json.dumps(context_payload, default=str)}"
                 
                 try:
-                    import asyncio
                     ai_res = await asyncio.wait_for(
                         NewsIntelligenceService._call_llm_with_prompt(user_msg),
                         timeout=4.0
@@ -259,7 +349,10 @@ class NewsIntelligenceService:
                         res2=res2,
                         pending_catalysts=pending_catalysts,
                         now_wib_str=now_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
-                        dynamic_fallback_plan=dynamic_plan
+                        dynamic_fallback_plan=dynamic_plan,
+                        intermarket_snapshot=intermarket_snap,
+                        event_comparison_note=event_comparison_note,
+                        historical_eval=hist_eval,
                     )
             except Exception as e:
                 logger.warning(f"LLM News Intelligence failed, fallback to institutional model: {e}")
@@ -281,7 +374,10 @@ class NewsIntelligenceService:
             res2=res2,
             pending_catalysts=pending_catalysts,
             now_wib_str=now_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
-            dynamic_fallback_plan=dynamic_plan
+            dynamic_fallback_plan=dynamic_plan,
+            intermarket_snapshot=intermarket_snap,
+            event_comparison_note=event_comparison_note,
+            historical_eval=hist_eval,
         )
 
     @staticmethod
@@ -320,6 +416,9 @@ class NewsIntelligenceService:
                             else:
                                 clean_json = text
                             return json.loads(clean_json)
+                        elif r.status_code == 401:
+                            logger.warning("Claude API key invalid (401) in news intelligence; skipping remaining models.")
+                            break
                         else:
                             logger.warning(f"Claude {model} news intelligence status {r.status_code}: {r.text}")
                 except Exception as e:
@@ -370,7 +469,10 @@ class NewsIntelligenceService:
         res2: float,
         pending_catalysts: List[Dict[str, str]],
         now_wib_str: str,
-        dynamic_fallback_plan: Dict[str, Any]
+        dynamic_fallback_plan: Dict[str, Any],
+        intermarket_snapshot: Optional[Dict[str, Any]] = None,
+        event_comparison_note: str = "",
+        historical_eval: Optional[Dict[str, Any]] = None,
     ) -> NewsIntelligenceResponse:
         """
         Anti-Hallucination Guardrail & Sanitizer for News Intelligence:
@@ -487,6 +589,7 @@ class NewsIntelligenceService:
             "sepenuhnya berada di tangan Anda."
         )
 
+        h_eval = historical_eval or {}
         return NewsIntelligenceResponse(
             symbol=symbol,
             event_title=event_name,
@@ -510,6 +613,11 @@ class NewsIntelligenceService:
             scenarios=scenarios_clean,
             catalysts_to_watch=clean_to_watch,
             pending_catalysts=final_pending,
+            intermarket_snapshot=intermarket_snapshot,
+            event_comparison_note=event_comparison_note,
+            historical_reactions=h_eval.get("recent_reactions") or [],
+            historical_summary=str(h_eval.get("summary") or ""),
+            avg_historical_range_pips=float(h_eval.get("avg_release_range_pips") or 0.0),
             disclaimer=disclaimer,
             analyzed_at_wib=now_wib_str
         )

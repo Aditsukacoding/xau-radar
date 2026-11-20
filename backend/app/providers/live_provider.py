@@ -421,7 +421,7 @@ class LiveDataProvider(BaseDataProvider):
             forecast = ev.get("forecast") or "-"
             previous = ev.get("previous") or "-"
 
-            events.append({
+            ev_dict = {
                 "external_id": f"ff_{country}_{title}_{date_str}",
                 "currency": country,
                 "event_title": title,
@@ -431,8 +431,11 @@ class LiveDataProvider(BaseDataProvider):
                 "forecast_value": str(forecast).strip() if forecast and forecast != "-" else None,
                 "previous_value": str(previous).strip() if previous and previous != "-" else None,
                 "unit": "",
-                "sentiment_impact": self._classify_sentiment(title),
-            })
+            }
+            from app.services.macro_intelligence import MacroIntelligenceService
+            eval_res = MacroIntelligenceService.evaluate_economic_event_impact(ev_dict)
+            ev_dict["sentiment_impact"] = eval_res["gold_impact"]
+            events.append(ev_dict)
 
         return events
 
@@ -910,42 +913,9 @@ class LiveDataProvider(BaseDataProvider):
         return results
 
     def _compute_sentiment(self, text: str) -> tuple[str, float]:
-        """Quantitative financial and geopolitical sentiment analyzer for Gold (XAU/USD)"""
-        lower = text.lower()
-        score = 0.0
-
-        # Bullish triggers for Gold (Safe-haven demand, Dollar weakness, Rate cuts, Escalation)
-        bullish_words = [
-            "gain", "jump", "surge", "rally", "rise", "soar", "high", "safe haven", "safe-haven",
-            "rate cut", "dovish", "inflation hedge", "stimulus", "record", "support",
-            "climb", "escalate", "escalation", "boost", "demand", "bought", "war", "conflict",
-            "strike", "attack", "missile", "sanctions", "tensions", "crisis", "threat",
-            "weak dollar", "dollar slides", "dollar falls", "yields drop", "fed pivot"
-        ]
-        # Bearish triggers for Gold (Rate hikes, Dollar strength, De-escalation, Yield surges)
-        bearish_words = [
-            "fall", "drop", "plunge", "slump", "slide", "low", "rate hike",
-            "hawkish", "dollar surge", "dollar rally", "strong dollar", "sell-off", "loss",
-            "pressure", "tumble", "dips", "retreat", "rebound dollar", "yields rise", "yield surge",
-            "ceasefire", "truce", "peace deal", "de-escalation", "talks progress"
-        ]
-
-        for word in bullish_words:
-            if word in lower:
-                score += 0.35
-        for word in bearish_words:
-            if word in lower:
-                score -= 0.35
-
-        score = max(-0.95, min(0.95, round(score, 2)))
-
-        if score >= 0.2:
-            label = "POSITIVE"
-        elif score <= -0.2:
-            label = "NEGATIVE"
-        else:
-            label = "NEUTRAL"
-
+        """Context-aware, negation-safe financial and geopolitical sentiment analyzer for Gold (XAU/USD)."""
+        from app.services.macro_intelligence import MacroIntelligenceService
+        label, score, _theme = MacroIntelligenceService.classify_news_sentiment_smart(text)
         return label, score
 
     def _generate_fallback_candles(

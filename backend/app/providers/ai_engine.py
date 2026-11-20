@@ -95,13 +95,14 @@ class AIAgentEngine:
         economic_events: List[Dict[str, Any]],
         news_articles: List[Dict[str, Any]],
         mtf_technical: Optional[Dict[str, Any]] = None,
+        macro_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Synthesizes multi-timeframe scalping + 3-pillar data using:
         1. Anthropic Claude API (Sonnet 4.5 / Haiku 4.5) when valid ANTHROPIC_API_KEY is configured
         2. Gemini API (if configured)
         3. OpenRouter AI Gateway (if configured)
-        4. Built-in ATR & Multi-Timeframe Quantitative Direct Scalping Engine
+        4. Built-in ATR & Multi-Timeframe Quantitative Key-Zone Sniper Engine + Macro/Intermarket
         Always followed by a smart non-destructive physics & pip sanitizer.
         """
         curr_price = float(price_snapshot.get("current_price", 0.0) or technical_data.get("latest_price", 3560.0))
@@ -114,12 +115,17 @@ class AIAgentEngine:
         h4_tech = mtf.get("4h") or h1_tech
         d1_tech = mtf.get("1d") or h4_tech
         confluence = mtf.get("confluence") or {}
+        mctx = macro_context or {}
 
         payload_data = {
             "symbol": symbol,
             "current_price": curr_price,
             "session": m15_tech.get("session_name", "Global Session"),
             "session_volatility": m15_tech.get("session_volatility", "MEDIUM"),
+            "intermarket_live": mctx.get("intermarket", {}),
+            "economic_surprise_analysis": mctx.get("fundamental", {}),
+            "geopolitical_intelligence": mctx.get("geopolitical", {}),
+            "historical_news_reactions": mctx.get("historical_reactions", {}),
             "top_down_alignment": {
                 "alignment_label": confluence.get("alignment_label", ""),
                 "htf_bias_d1_h4_h1": confluence.get("htf_bias", h1_tech.get("trend_direction")),
@@ -136,8 +142,8 @@ class AIAgentEngine:
                 "m15_atr_swings": {"atr_14": m15_tech.get("atr_14"), "atr_pips": m15_tech.get("atr_pips"), "swing_lows": m15_tech.get("swing_lows", []), "swing_highs": m15_tech.get("swing_highs", [])},
                 "m30_h1_intraday": {"m30_trend": m30_tech.get("trend_direction"), "h1_trend": h1_tech.get("trend_direction"), "h4_trend": h4_tech.get("trend_direction"), "d1_trend": d1_tech.get("trend_direction")},
             },
-            "upcoming_economic_events": economic_events[:4],
-            "recent_news_sentiment": news_articles[:4],
+            "upcoming_and_recent_economic_events": economic_events[:10],
+            "recent_news_sentiment": news_articles[:8],
         }
 
         # 1. Try Anthropic Claude API if valid key exists
@@ -197,7 +203,7 @@ class AIAgentEngine:
             except Exception as e:
                 logger.warning(f"OpenRouter API failed, falling back to quantitative 7-TF scalping engine: {e}")
 
-        # 4. Built-in 7-Timeframe ATR & Confluence Quantitative Direct Scalping Engine
+        # 4. Built-in 7-Timeframe ATR & Confluence Quantitative Key-Zone Sniper Engine + Live Macro
         raw_heuristic = AIAgentEngine._heuristic_synthesis(
             symbol=symbol,
             price_snapshot=price_snapshot,
@@ -207,6 +213,7 @@ class AIAgentEngine:
             m15_data=m15_tech,
             m5_data=m5_tech,
             mtf_technical=mtf,
+            macro_context=mctx,
         )
         return AIAgentEngine._sanitize_and_validate_trade_setup(
             raw_heuristic,
@@ -413,6 +420,7 @@ class AIAgentEngine:
         m15_data: Optional[Dict[str, Any]] = None,
         m5_data: Optional[Dict[str, Any]] = None,
         mtf_technical: Optional[Dict[str, Any]] = None,
+        macro_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Quantitative 7-Timeframe Top-Down (M1, M5, M15, M30, H1, H4, D1) Confluence Scalping Synthesizer.
@@ -469,22 +477,34 @@ class AIAgentEngine:
 
         tech_score = max(-1.0, min(1.0, base_mtf + pa_boost + rsi_edge))
 
-        # 2. Geopolitical Sentiment Score (-1.0 to 1.0)
-        news_scores = [float(n.get("sentiment_score", 0.0) or 0.0) for n in news_articles]
-        geo_score = sum(news_scores) / len(news_scores) if news_scores else 0.0
+        # 2. Geopolitical Sentiment Score (-1.0 to 1.0) — Time-Decayed, Theme-Aware & Contrast-Safe
+        mctx = macro_context or {}
+        geo_eval = mctx.get("geopolitical") or {}
+        fund_eval = mctx.get("fundamental") or {}
+        intermarket = mctx.get("intermarket") or {}
+        hist_eval = mctx.get("historical_reactions") or {}
 
-        # 3. Fundamental Score (-1.0 to 1.0)
-        fund_score = 0.10
-        for event in economic_events:
-            impact = str(event.get("sentiment_impact", "") or "").upper()
-            if "BULLISH_GOLD" in impact or "BEARISH_USD" in impact:
-                fund_score += 0.25
-            elif "BEARISH_GOLD" in impact or "BULLISH_USD" in impact:
-                fund_score -= 0.25
-        fund_score = max(-1.0, min(1.0, fund_score))
+        if "geo_score" in geo_eval:
+            geo_score = float(geo_eval["geo_score"])
+        else:
+            news_scores = [float(n.get("sentiment_score", 0.0) or 0.0) for n in news_articles]
+            geo_score = sum(news_scores) / len(news_scores) if news_scores else 0.0
 
-        # Weighted Composite Score
-        composite_score = (tech_score * 0.60) + (fund_score * 0.22) + (geo_score * 0.18)
+        # 3. Fundamental Score (-1.0 to 1.0) — Live Intermarket (DXY/US10Y) + Numeric Actual vs Forecast Surprises
+        if "fund_score" in fund_eval:
+            fund_score = float(fund_eval["fund_score"])
+        else:
+            fund_score = 0.0
+            for event in economic_events:
+                impact = str(event.get("sentiment_impact", "") or "").upper()
+                if "BULLISH_GOLD" in impact or "BEARISH_USD" in impact:
+                    fund_score += 0.22
+                elif "BEARISH_GOLD" in impact or "BULLISH_USD" in impact:
+                    fund_score -= 0.22
+            fund_score = max(-1.0, min(1.0, fund_score))
+
+        # Weighted 3-Pillar Composite Score (Technical 54% + Fundamental/Intermarket 26% + Geopolitical 20%)
+        composite_score = (tech_score * 0.54) + (fund_score * 0.26) + (geo_score * 0.20)
 
         # Confluence Support & Resistance from all 7 TFs
         conf_sups = confluence.get("confluence_supports") or []
@@ -557,17 +577,32 @@ class AIAgentEngine:
             f"Penembusan candle M15 melewati batas invalidasi ${trade_setup['stop_loss']:.2f} membatalkan setup.",
         ]
 
+        fund_notes_real = str(fund_eval.get("summary") or "").strip()
+        hist_summary = str(hist_eval.get("summary") or "").strip()
+        if fund_notes_real and hist_summary:
+            final_fund_notes = f"{fund_notes_real} {hist_summary}"
+        elif fund_notes_real:
+            final_fund_notes = fund_notes_real
+        else:
+            final_fund_notes = (
+                "Ekspektasi kebijakan suku bunga The Fed, imbal hasil Treasury AS, serta perbandingan "
+                "Actual vs Forecast kalender ekonomi terdekat membentuk sentimen dasar XAU/USD."
+            )
+
+        geo_notes_real = str(geo_eval.get("summary") or "").strip()
+        final_geo_notes = geo_notes_real if geo_notes_real else (
+            "Dinamika geopolitik global dan aliran aset safe-haven tetap menjadi penopang volatilitas intraday emas."
+        )
+
+        if intermarket.get("market_regime_evidence"):
+            sources.append(f"Intermarket Live: {intermarket['market_regime_evidence']}")
+
         return {
             "bias": bias,
             "confidence_score": confidence,
             "summary": summary,
-            "fundamental_notes": (
-                "Ekspektasi kebijakan suku bunga The Fed, imbal hasil Treasury AS, serta agenda kalender "
-                "ekonomi terdekat membentuk sentimen dasar XAU/USD."
-            ),
-            "geopolitical_notes": (
-                "Dinamika geopolitik global dan aliran aset safe-haven tetap menjadi penopang volatilitas intraday emas."
-            ),
+            "fundamental_notes": final_fund_notes,
+            "geopolitical_notes": final_geo_notes,
             "technical_notes": (
                 f"HTF (D1 {d1.get('trend_direction', '-')}, H4 {h4.get('trend_direction', '-')}, H1 {technical_data.get('trend_direction', '-')}) | "
                 f"ITF (M30 {m30.get('trend_direction', '-')}, M15 {m15.get('trend_direction', '-')}) | "

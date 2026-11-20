@@ -17,6 +17,7 @@ from app.providers import get_data_provider
 from app.services.technical_calc import TechnicalCalculator
 from app.services.analysis_service import AnalysisService
 from app.services.ingestion_service import IngestionService
+from app.services.macro_intelligence import MacroIntelligenceService
 
 router = APIRouter()
 
@@ -101,6 +102,12 @@ async def get_dashboard_summary(symbol: str = "XAUUSD", db: Session = Depends(ge
     trade_setup_raw = json.loads(report.trade_setup_json) if getattr(report, 'trade_setup_json', None) else None
     trade_setup_obj = TradeSetup(**trade_setup_raw) if trade_setup_raw else None
 
+    # Live Intermarket Snapshot (DXY, US10Y Yield, WTI Crude Oil — 3-min cached)
+    try:
+        intermarket = await MacroIntelligenceService.fetch_intermarket_snapshot()
+    except Exception:
+        intermarket = None
+
     return DashboardSummaryResponse(
         symbol=symbol,
         instrument_name=instrument.name,
@@ -120,6 +127,7 @@ async def get_dashboard_summary(symbol: str = "XAUUSD", db: Session = Depends(ge
             "rsi": tech_data.get("rsi_14"),
             "rsi_status": tech_data.get("rsi_condition"),
             "summary": tech_data.get("summary"),
+            "intermarket": intermarket,
         },
         disclaimer=report.disclaimer,
         last_updated=report.created_at,

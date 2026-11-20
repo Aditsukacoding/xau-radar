@@ -68,14 +68,21 @@ class EventCard extends StatelessWidget {
       statusIcon = LucideIcons.hourglass;
     }
 
-    // Determine Aktual display text and style
+    // Determine Aktual display text, style & Gold Impact verdict from numeric Actual vs Forecast
+    final impUpper = (event.sentimentImpact ?? '').toUpperCase();
+    final isGoldBullish = impUpper.contains('BULLISH_GOLD');
+    final isGoldBearish = impUpper.contains('BEARISH_GOLD');
+    final isStrong = impUpper.contains('STRONG_');
+
     String actualDisplayText;
     Color actualDisplayColor;
     bool actualIsBold;
 
     if (hasActual) {
       actualDisplayText = event.actualValue!;
-      actualDisplayColor = const Color(0xFF00E676);
+      actualDisplayColor = isGoldBullish
+          ? AppColors.bullish
+          : (isGoldBearish ? AppColors.bearish : AppColors.gold);
       actualIsBold = true;
     } else if (isUpcoming) {
       actualDisplayText = 'Belum Rilis';
@@ -89,6 +96,25 @@ class EventCard extends StatelessWidget {
       actualDisplayText = 'Pending';
       actualDisplayColor = const Color(0xFFFFB300);
       actualIsBold = false;
+    }
+
+    String? goldVerdictText;
+    Color goldVerdictColor = AppColors.gold;
+    IconData goldVerdictIcon = LucideIcons.minus;
+    if (hasActual && (isGoldBullish || isGoldBearish || impUpper == 'NEUTRAL')) {
+      if (isGoldBullish) {
+        goldVerdictText = isStrong ? 'Kejutan Kuat • Bullish XAU (USD Melemah)' : 'Dampak Aktual • Condong Bullish XAU';
+        goldVerdictColor = AppColors.bullish;
+        goldVerdictIcon = LucideIcons.trendingUp;
+      } else if (isGoldBearish) {
+        goldVerdictText = isStrong ? 'Kejutan Kuat • Bearish XAU (USD Menguat)' : 'Dampak Aktual • Condong Bearish XAU';
+        goldVerdictColor = AppColors.bearish;
+        goldVerdictIcon = LucideIcons.trendingDown;
+      } else {
+        goldVerdictText = 'Aktual Sesuai Konsensus • Dampak Netral / Whipsaw';
+        goldVerdictColor = AppColors.gold;
+        goldVerdictIcon = LucideIcons.minus;
+      }
     }
 
     return IosGlassCard(
@@ -211,6 +237,36 @@ class EventCard extends StatelessWidget {
               ],
             ),
           ),
+          if (goldVerdictText != null) ...[
+            const SizedBox(height: 9),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6.5),
+              decoration: BoxDecoration(
+                color: goldVerdictColor.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: goldVerdictColor.withValues(alpha: 0.28), width: 0.7),
+              ),
+              child: Row(
+                children: [
+                  Icon(goldVerdictIcon, color: goldVerdictColor, size: 12.5),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      goldVerdictText,
+                      style: TextStyle(
+                        color: goldVerdictColor,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -656,6 +656,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                   ),
+                  if (data.technicalSnapshot['intermarket'] is Map) ...[
+                    const SizedBox(height: 12),
+                    _buildIntermarketStrip(
+                      Map<String, dynamic>.from(data.technicalSnapshot['intermarket'] as Map),
+                    ),
+                  ],
                   const SizedBox(height: 14),
 
                   // Clean Deep Link to 3-Pillar Detail Page
@@ -1129,6 +1135,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildIntermarketStrip(Map<String, dynamic> im) {
+    final dxy = im['dxy'] is Map ? Map<String, dynamic>.from(im['dxy'] as Map) : null;
+    final us10y = im['us10y'] is Map ? Map<String, dynamic>.from(im['us10y'] as Map) : null;
+    final wti = im['wti'] is Map ? Map<String, dynamic>.from(im['wti'] as Map) : null;
+    if (dxy == null && us10y == null && wti == null) {
+      return const SizedBox.shrink();
+    }
+
+    Widget cell(String label, Map<String, dynamic>? q, {String prefix = '', String suffix = ''}) {
+      if (q == null) {
+        return Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 3),
+              Text('-', style: AppTypography.mono(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        );
+      }
+      final price = (q['price'] as num?)?.toDouble() ?? 0.0;
+      final pct = (q['change_pct'] as num?)?.toDouble() ?? 0.0;
+      final effect = q['gold_effect']?.toString() ?? 'NEUTRAL';
+      final color = effect == 'BULLISH_GOLD'
+          ? AppColors.bullish
+          : (effect == 'BEARISH_GOLD' ? AppColors.bearish : AppColors.textSecondary);
+      final sign = pct >= 0 ? '+' : '';
+      return Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '$prefix${price.toStringAsFixed(2)}$suffix',
+                style: AppTypography.mono(
+                  color: AppColors.textPrimary,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$sign${pct.toStringAsFixed(2)}%',
+              style: AppTypography.mono(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInset,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: AppColors.border, width: 0.8),
+      ),
+      child: Row(
+        children: [
+          cell('DXY', dxy),
+          Container(width: 0.8, height: 32, color: AppColors.borderSubtle),
+          cell('US10Y', us10y, suffix: '%'),
+          Container(width: 0.8, height: 32, color: AppColors.borderSubtle),
+          cell('WTI OIL', wti, prefix: '\$'),
+        ],
+      ),
     );
   }
 

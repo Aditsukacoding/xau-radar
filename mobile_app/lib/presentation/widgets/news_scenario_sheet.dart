@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../data/models/news_intelligence_model.dart';
 import 'ios_glass_card.dart';
 
@@ -224,6 +225,13 @@ class NewsScenarioSheet extends StatelessWidget {
                             height: 1.45,
                           ),
                         ),
+                        if (data.intermarketSnapshot != null &&
+                            (data.intermarketSnapshot!.dxy != null ||
+                                data.intermarketSnapshot!.us10y != null ||
+                                data.intermarketSnapshot!.wti != null)) ...[
+                          const SizedBox(height: 12),
+                          _buildIntermarketGrid(data.intermarketSnapshot!),
+                        ],
                       ],
                     ),
                   ),
@@ -350,6 +358,17 @@ class NewsScenarioSheet extends StatelessWidget {
                     const SizedBox(height: 10),
                   ],
                   const SizedBox(height: 14),
+
+                  // 5b. Historical Market Reaction (Actual Candle Impact on Past USD Releases)
+                  if (data.historicalReactions.isNotEmpty || data.historicalSummary.isNotEmpty) ...[
+                    _buildSectionCard(
+                      icon: LucideIcons.history,
+                      iconColor: AppColors.cyan,
+                      title: 'REKAM JEJAK HISTORIS REAKSI XAU',
+                      content: _buildHistoricalReactionsContent(data),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
 
                   // 6. Hal yang Bisa Mengubah Kesimpulan
                   _buildSectionCard(
@@ -614,6 +633,179 @@ class NewsScenarioSheet extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildIntermarketGrid(IntermarketSnapshotModel im) {
+    Widget buildTile(String label, String priceStr, IntermarketQuoteItem? q) {
+      if (q == null) {
+        return Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceInset,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderSubtle, width: 0.7),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text('-', style: AppTypography.mono(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        );
+      }
+      final sign = q.changePct >= 0 ? '+' : '';
+      final Color goldColor = q.goldEffect == 'BULLISH_GOLD'
+          ? AppColors.bullish
+          : (q.goldEffect == 'BEARISH_GOLD' ? AppColors.bearish : AppColors.gold);
+      final String effectLbl = q.goldEffect == 'BULLISH_GOLD'
+          ? 'Bullish XAU'
+          : (q.goldEffect == 'BEARISH_GOLD' ? 'Bearish XAU' : 'Netral');
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 9),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceInset,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: goldColor.withValues(alpha: 0.28), width: 0.7),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  priceStr,
+                  style: AppTypography.mono(color: AppColors.textPrimary, fontSize: 12.5, fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '$sign${q.changePct.toStringAsFixed(2)}%',
+                style: AppTypography.mono(color: goldColor, fontSize: 10, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                effectLbl,
+                style: TextStyle(color: goldColor.withValues(alpha: 0.85), fontSize: 8.5, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        buildTile('DXY (USD)', im.dxy != null ? im.dxy!.price.toStringAsFixed(2) : '-', im.dxy),
+        const SizedBox(width: 8),
+        buildTile('US10Y YIELD', im.us10y != null ? '${im.us10y!.price.toStringAsFixed(2)}%' : '-', im.us10y),
+        const SizedBox(width: 8),
+        buildTile('WTI OIL', im.wti != null ? '\$${im.wti!.price.toStringAsFixed(2)}' : '-', im.wti),
+      ],
+    );
+  }
+
+  Widget _buildHistoricalReactionsContent(NewsIntelligenceModel model) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (model.avgHistoricalRangePips > 0) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: AppColors.cyan.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: AppColors.cyan.withValues(alpha: 0.28), width: 0.7),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Rata-rata Volatilitas 1 Jam (News)',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  '±${model.avgHistoricalRangePips.toStringAsFixed(0)} pips',
+                  style: AppTypography.mono(color: AppColors.cyan, fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        if (model.historicalReactions.isNotEmpty)
+          ...model.historicalReactions.map((hr) {
+            final isPos = hr.move1hPips >= 0;
+            final moveColor = hr.direction == 'BULLISH'
+                ? AppColors.bullish
+                : (hr.direction == 'BEARISH' ? AppColors.bearish : AppColors.gold);
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceInset,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.borderSubtle, width: 0.7),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          hr.eventTitle,
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 11.5, fontWeight: FontWeight.w700),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: moveColor.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          '${isPos ? '+' : ''}${hr.move1hPips.toStringAsFixed(0)}p (1H)',
+                          style: AppTypography.mono(color: moveColor, fontSize: 10, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${hr.releasedAtWib} • Act ${hr.actual} vs Fc ${hr.forecast} • Range ${hr.range1hPips.toStringAsFixed(0)}p',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                  ),
+                  if (hr.verdict.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      hr.verdict,
+                      style: TextStyle(color: moveColor, fontSize: 10, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          })
+        else if (model.historicalSummary.isNotEmpty)
+          Text(
+            model.historicalSummary,
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.45),
+          ),
       ],
     );
   }

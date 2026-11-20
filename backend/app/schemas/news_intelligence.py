@@ -34,5 +34,10 @@ class NewsIntelligenceResponse(BaseModel):
     scenarios: List[NewsScenarioItem]
     catalysts_to_watch: List[str]
     pending_catalysts: List[Dict[str, str]]
+    intermarket_snapshot: Optional[Dict[str, Any]] = None  # Live DXY, US10Y, WTI & Market Regime
+    event_comparison_note: str = ""  # Numeric Actual vs Forecast vs Previous comparison
+    historical_reactions: List[Dict[str, Any]] = []  # Real 1H XAU pip reactions on recent USD releases
+    historical_summary: str = ""  # Summary of historical news impact & volatility benchmark
+    avg_historical_range_pips: float = 0.0
     disclaimer: str
     analyzed_at_wib: str

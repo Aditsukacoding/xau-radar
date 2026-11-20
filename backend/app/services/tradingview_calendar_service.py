@@ -240,6 +240,8 @@ class TradingViewCalendarService:
             )
             if act:
                 ev["actual_value"] = act
+                from app.services.macro_intelligence import MacroIntelligenceService
+                ev["sentiment_impact"] = MacroIntelligenceService.evaluate_economic_event_impact(ev)["gold_impact"]
 
         return events
 
@@ -260,6 +262,7 @@ class TradingViewCalendarService:
             .all()
         )
 
+        from app.services.macro_intelligence import MacroIntelligenceService
         updated_count = 0
         for ev in pending_events:
             act = cls.match_actual_for_event(
@@ -272,6 +275,15 @@ class TradingViewCalendarService:
             )
             if act:
                 ev.actual_value = act
+                eval_res = MacroIntelligenceService.evaluate_economic_event_impact({
+                    "event_title": ev.event_title,
+                    "currency": ev.currency,
+                    "impact_level": ev.impact_level,
+                    "actual_value": act,
+                    "forecast_value": ev.forecast_value,
+                    "previous_value": ev.previous_value,
+                })
+                ev.sentiment_impact = eval_res["gold_impact"]
                 updated_count += 1
 
         if updated_count > 0:

@@ -1,7 +1,7 @@
 import json
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -12,6 +12,7 @@ from app.models.economic_event import EconomicEvent
 from app.models.news_article import NewsArticle
 from app.providers import get_data_provider
 from app.services.technical_calc import TechnicalCalculator
+from app.services.macro_intelligence import MacroIntelligenceService
 from app.providers.ai_engine import AIAgentEngine
 from app.core.config import settings
 
@@ -108,23 +109,30 @@ class AnalysisService:
             mtf_results[tf] = TechnicalCalculator.calculate_indicators(use_list)
 
         mtf_results["confluence"] = TechnicalCalculator.analyze_mtf_confluence(mtf_results, curr_price)
+        mtf_results["_h1_candles"] = fetched[4] if len(fetched) > 4 else []
         return mtf_results
 
     @classmethod
     def _load_events_and_news(cls, db: Session, symbol: str):
         now = datetime.now(timezone.utc)
+        # Load recently released events (last 14 days for Actual vs Forecast + Historical Reaction) + upcoming 7 days
         events_db = (
             db.query(EconomicEvent)
-            .filter(EconomicEvent.scheduled_at >= now)
+            .filter(
+                EconomicEvent.scheduled_at >= (now - timedelta(days=14)),
+                EconomicEvent.scheduled_at <= (now + timedelta(days=7)),
+            )
             .order_by(EconomicEvent.scheduled_at.asc())
-            .limit(5)
+            .limit(40)
             .all()
         )
         events_data = [
             {
+                "currency": e.currency,
                 "event_title": e.event_title,
                 "impact_level": e.impact_level,
                 "scheduled_at": e.scheduled_at.isoformat(),
+                "actual_value": e.actual_value,
                 "forecast_value": e.forecast_value,
                 "previous_value": e.previous_value,
                 "sentiment_impact": e.sentiment_impact,
@@ -136,7 +144,7 @@ class AnalysisService:
             db.query(NewsArticle)
             .filter(NewsArticle.symbol == symbol)
             .order_by(desc(NewsArticle.published_at))
-            .limit(5)
+            .limit(20)
             .all()
         )
         news_data = [
@@ -146,26 +154,58 @@ class AnalysisService:
                 "summary": n.summary,
                 "sentiment_label": n.sentiment_label,
                 "sentiment_score": n.sentiment_score,
+                "published_at": n.published_at.isoformat() if n.published_at else now.isoformat(),
             }
             for n in news_db
         ]
         return events_data, news_data
 
     @classmethod
+    async def _build_macro_context(
+        cls,
+        events_data: List[Dict[str, Any]],
+        news_data: List[Dict[str, Any]],
+        h1_candles: List[Dict[str, Any]],
+        intermarket: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        im = intermarket if intermarket is not None else await MacroIntelligenceService.fetch_intermarket_snapshot()
+        all_events = list(events_data or [])
+        released_usd = sum(1 for e in all_events if str(e.get("currency", "")).upper() == "USD" and e.get("actual_value"))
+        if released_usd < 3:
+            tv_past = await MacroIntelligenceService.fetch_recent_released_usd_events(days_back=14)
+            if tv_past:
+                all_events.extend(tv_past)
+        fund_eval = MacroIntelligenceService.evaluate_fundamental_pillar(all_events, im)
+        geo_eval = MacroIntelligenceService.analyze_geopolitical_and_macro_news(news_data, im)
+        hist_eval = MacroIntelligenceService.analyze_historical_news_reactions(all_events, h1_candles)
+        return {
+            "intermarket": im,
+            "fundamental": fund_eval,
+            "geopolitical": geo_eval,
+            "historical_reactions": hist_eval,
+        }
+
+    @classmethod
     async def _generate_instant_baseline(cls, db: Session, symbol: str = "XAUUSD") -> AnalysisReport:
         """
-        Generates a fast quantitative M5/M15/H1 scalping baseline report (SL + TP1 + TP2 + TP3)
+        Generates a fast quantitative 7-TF + Macro/Intermarket baseline report
         used during startup seeding or if external LLM endpoints time out.
         """
         provider = get_data_provider()
         price_snapshot = await provider.get_latest_price(symbol)
         curr_price = float(price_snapshot.get("current_price", 3560.0))
 
-        mtf_tech = await cls._fetch_mtf_indicators(db, symbol, curr_price)
+        mtf_tech, intermarket = await asyncio.gather(
+            cls._fetch_mtf_indicators(db, symbol, curr_price),
+            MacroIntelligenceService.fetch_intermarket_snapshot(),
+        )
         h1_tech = mtf_tech["1h"]
         m15_tech = mtf_tech["15m"]
         m5_tech = mtf_tech["5m"]
         events_data, news_data = cls._load_events_and_news(db, symbol)
+        macro_ctx = await cls._build_macro_context(
+            events_data, news_data, mtf_tech.get("_h1_candles") or [], intermarket=intermarket
+        )
 
         raw_heuristic = AIAgentEngine._heuristic_synthesis(
             symbol=symbol,
@@ -176,6 +216,7 @@ class AnalysisService:
             m15_data=m15_tech,
             m5_data=m5_tech,
             mtf_technical=mtf_tech,
+            macro_context=macro_ctx,
         )
         sanitized = AIAgentEngine._sanitize_and_validate_trade_setup(
             raw_heuristic,
@@ -443,11 +484,14 @@ class AnalysisService:
         price_snapshot = await provider.get_latest_price(symbol)
         curr_price = float(price_snapshot.get("current_price", 3560.0))
 
-        # 2. Fetch Multi-Timeframe technical context (M5 + M15 + H1 + ATR + Fractal Swings + Session)
-        mtf_tech = await cls._fetch_mtf_indicators(db, symbol, curr_price)
+        # 2. Fetch 7-Timeframe technical indicators AND live Intermarket (DXY, US10Y, WTI) concurrently
+        mtf_tech, intermarket = await asyncio.gather(
+            cls._fetch_mtf_indicators(db, symbol, curr_price),
+            MacroIntelligenceService.fetch_intermarket_snapshot(),
+        )
         h1_tech = mtf_tech["1h"]
 
-        # 3. Fetch fundamental & geopolitical inputs
+        # 3. Fetch fundamental & geopolitical inputs (recent released + upcoming)
         events_data, news_data = cls._load_events_and_news(db, symbol)
         if not events_data:
             try:
@@ -460,7 +504,12 @@ class AnalysisService:
             except Exception:
                 news_data = []
 
-        # 4. Call AI Engine (Claude Sonnet/Haiku -> Gemini -> OpenRouter -> Quantitative MTF Scalping Engine)
+        # 3b. Evaluate Numeric Actual-vs-Forecast Surprises, Historical News Reactions & Time-Decayed Geo Intelligence
+        macro_ctx = await cls._build_macro_context(
+            events_data, news_data, mtf_tech.get("_h1_candles") or [], intermarket=intermarket
+        )
+
+        # 4. Call AI Engine (Claude Sonnet/Haiku -> Gemini -> OpenRouter -> Quantitative 7-TF + Macro Engine)
         ai_res = await AIAgentEngine.synthesize_market_bias(
             symbol=symbol,
             price_snapshot=price_snapshot,
@@ -468,6 +517,7 @@ class AnalysisService:
             economic_events=events_data,
             news_articles=news_data,
             mtf_technical=mtf_tech,
+            macro_context=macro_ctx,
         )
 
         # 5. Store report in database
