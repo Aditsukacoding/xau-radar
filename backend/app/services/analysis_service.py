@@ -260,10 +260,19 @@ class AnalysisService:
             should_regenerate = False
             reason = ""
 
-            # Force upgrade legacy pre-TP3 or pre-7TF setups immediately
-            if tp3 <= 0 or entry_p <= 0 or sl <= 0 or not setup.get("mtf_overview"):
+            # Force upgrade legacy pre-TP3, pre-7TF, or non-Sniper (SL > 52p / missing entry_reasons) setups
+            risk_pips_val = float(setup.get("risk_pips", 0.0) or 0.0)
+            tp1_pips_val = float(setup.get("reward_tp1_pips", 0.0) or 0.0)
+            if (
+                tp3 <= 0
+                or entry_p <= 0
+                or sl <= 0
+                or not setup.get("mtf_overview")
+                or not setup.get("entry_reasons")
+                or (action in ("BUY", "SELL") and (risk_pips_val > 52.0 or risk_pips_val < 28.0 or tp1_pips_val < 55.0))
+            ):
                 should_regenerate = True
-                reason = "Upgrade skema setup ke 7-Timeframe MTF Direct Scalping (M1–D1 + TP1/TP2/TP3)."
+                reason = "Kalibrasi setup ke Sniper Scalping 7-TF (SL ketat 30–50 pips, TP1 60 pips, & Alasan Entry terstruktur)."
 
             # --- 1. EVALUATE SELL SCALP SETUP ---
             elif action == "SELL":

@@ -30,6 +30,7 @@ class TradeSetup(BaseModel):
     reward_tp2_pips: float = 0.0
     reward_tp3_pips: float = 0.0
     lot_management: str = "40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3"
+    entry_reasons: List[Dict[str, str]] = []  # 4 structured bullet reasons: Arah 7-TF, Zona Entry, SL Ketat, Target TP1-TP3
     technical_rationale: str = ""
     invalidation_level: str = ""
     status: str = "ACTIVE"  # ACTIVE, RUNNING_TP1_HIT, RUNNING_TP2_HIT, COMPLETED, STOPPED_OUT

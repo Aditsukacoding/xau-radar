@@ -40,6 +40,36 @@ class MtfTimeframeItem {
       };
 }
 
+class EntryReasonItem {
+  final String title;
+  final String tag;
+  final String detail;
+  final String tone; // bullish, bearish, cyan, gold
+
+  const EntryReasonItem({
+    required this.title,
+    this.tag = '',
+    required this.detail,
+    this.tone = 'gold',
+  });
+
+  factory EntryReasonItem.fromJson(Map<String, dynamic> json) {
+    return EntryReasonItem(
+      title: json['title']?.toString() ?? '',
+      tag: json['tag']?.toString() ?? '',
+      detail: json['detail']?.toString() ?? '',
+      tone: json['tone']?.toString().toLowerCase() ?? 'gold',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'tag': tag,
+        'detail': detail,
+        'tone': tone,
+      };
+}
+
 class TradeSetupModel {
   final String action; // BUY, SELL, WAIT
   final String actionLabel; // BUY NOW (SCALP), SELL LIMIT (CONFLUENCE), etc.
@@ -62,6 +92,7 @@ class TradeSetupModel {
   final double rewardTp2Pips;
   final double rewardTp3Pips;
   final String lotManagement;
+  final List<EntryReasonItem> entryReasons;
   final String technicalRationale;
   final String invalidationLevel;
   final String? status;
@@ -93,7 +124,8 @@ class TradeSetupModel {
     required this.rewardTp1Pips,
     required this.rewardTp2Pips,
     this.rewardTp3Pips = 0.0,
-    this.lotManagement = '40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3',
+    this.lotManagement = '40% TP1 +60p (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3',
+    this.entryReasons = const [],
     required this.technicalRationale,
     required this.invalidationLevel,
     this.status = 'ACTIVE',
@@ -124,6 +156,15 @@ class TradeSetupModel {
             .toList()
         : const [];
 
+    final rawReasons = json['entry_reasons'];
+    final List<EntryReasonItem> reasons = (rawReasons is List)
+        ? rawReasons
+            .whereType<Map>()
+            .map((e) => EntryReasonItem.fromJson(Map<String, dynamic>.from(e)))
+            .where((item) => item.title.isNotEmpty && item.detail.isNotEmpty)
+            .toList()
+        : const [];
+
     return TradeSetupModel(
       action: json['action'] ?? 'WAIT',
       actionLabel: json['action_label'] ?? 'WAIT / STANDBY',
@@ -145,7 +186,8 @@ class TradeSetupModel {
       rewardTp1Pips: (json['reward_tp1_pips'] as num?)?.toDouble() ?? 0.0,
       rewardTp2Pips: (json['reward_tp2_pips'] as num?)?.toDouble() ?? 0.0,
       rewardTp3Pips: r3Pips,
-      lotManagement: json['lot_management'] ?? '40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3',
+      lotManagement: json['lot_management'] ?? '40% TP1 +60p (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3',
+      entryReasons: reasons,
       technicalRationale: json['technical_rationale'] ?? '',
       invalidationLevel: json['invalidation_level'] ?? '',
       status: json['status']?.toString() ?? 'ACTIVE',
@@ -176,6 +218,7 @@ class TradeSetupModel {
       'reward_tp2_pips': rewardTp2Pips,
       'reward_tp3_pips': rewardTp3Pips,
       'lot_management': lotManagement,
+      'entry_reasons': entryReasons.map((e) => e.toJson()).toList(),
       'technical_rationale': technicalRationale,
       'invalidation_level': invalidationLevel,
       'status': status,
