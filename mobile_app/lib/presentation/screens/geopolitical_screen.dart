@@ -92,132 +92,143 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
         children: [
           const SizedBox(height: topInset),
 
-          // Header Status & Sync Bar
+          // Clean Airy Header & Sync Bar
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text(
-                            'BERITA & GEOPOLITIK',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                          const SizedBox(width: 7),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.35), width: 0.8),
-                            ),
-                            child: const Text(
-                              'WIB (UTC+7)',
-                              style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                        ],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Berita & Geopolitik',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                        ),
                       ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: _isSyncing ? AppColors.appleBlue : AppColors.bullish,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: (_isSyncing ? AppColors.appleBlue : AppColors.bullish).withValues(alpha: 0.6),
-                                blurRadius: 4,
-                                spreadRadius: 1,
+                    ),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      onPressed: _isSyncing ? null : () => _loadNews(silent: false, triggerSync: true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceInset,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border, width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _isSyncing
+                                ? const CupertinoActivityIndicator(radius: 6, color: AppColors.gold)
+                                : const Icon(LucideIcons.refreshCw, size: 12, color: AppColors.gold),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Sync',
+                              style: TextStyle(
+                                color: AppColors.gold,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 5),
-                        Text(
-                          _isSyncing ? 'Menyinkronkan berita...' : 'AUTO-SYNC LIVE (15s)',
-                          style: TextStyle(
-                            color: _isSyncing ? AppColors.appleBlue : AppColors.bullish,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: _isSyncing ? null : () => _loadNews(silent: false, triggerSync: true),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.border),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      width: 6.5,
+                      height: 6.5,
+                      decoration: BoxDecoration(
+                        color: _isSyncing ? AppColors.cyan : AppColors.bullish,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (_isSyncing ? AppColors.cyan : AppColors.bullish).withValues(alpha: 0.55),
+                            blurRadius: 5,
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _isSyncing
-                            ? const CupertinoActivityIndicator(radius: 6, color: AppColors.primary)
-                            : const Icon(LucideIcons.refreshCw, size: 12, color: AppColors.primary),
-                        const SizedBox(width: 5),
-                        const Text(
-                          'Sync',
-                          style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isSyncing ? 'Menyinkronkan berita...' : 'Live 15d',
+                      style: TextStyle(
+                        color: _isSyncing ? AppColors.cyan : AppColors.bullish,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Text(
+                      '  •  ',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                    ),
+                    const Text(
+                      'WIB',
+                      style: TextStyle(
+                        color: AppColors.gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Text(
+                      '  •  ',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                    ),
+                    const Flexible(
+                      child: Text(
+                        'Katalis Global XAU/USD',
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
                         ),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // Apple Segmented Filter Bar
+          const SizedBox(height: 14),
+
+          // Full-Width Symmetric Apple Segmented Filter Bar
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: IosSegmentedControl<String>(
-                    items: const {
-                      'ALL': 'Semua',
-                      'POSITIVE': 'Bullish',
-                      'NEGATIVE': 'Bearish',
-                      'NEUTRAL': 'Netral',
-                    },
-                    selectedValue: _selectedSentiment,
-                    onValueChanged: (val) {
-                      setState(() {
-                        _selectedSentiment = val;
-                      });
-                      _loadNews();
-                    },
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: IosSegmentedControl<String>(
+              fullWidth: true,
+              items: const {
+                'ALL': 'Semua',
+                'POSITIVE': 'Bullish',
+                'NEGATIVE': 'Bearish',
+                'NEUTRAL': 'Netral',
+              },
+              selectedValue: _selectedSentiment,
+              onValueChanged: (val) {
+                setState(() {
+                  _selectedSentiment = val;
+                });
+                _loadNews();
+              },
             ),
           ),
 
-          const SizedBox(height: 4),
+          const SizedBox(height: 12),
           const Divider(height: 1, color: AppColors.borderSubtle),
 
           // News Articles List

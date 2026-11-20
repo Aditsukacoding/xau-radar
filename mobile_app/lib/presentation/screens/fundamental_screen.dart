@@ -112,209 +112,229 @@ class _FundamentalScreenState extends State<FundamentalScreen> {
         children: [
           const SizedBox(height: topInset),
 
-          // Header Status & Sync Bar
+          // Clean Airy Header & Sync Bar
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text(
-                            'KALENDER EKONOMI',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                          const SizedBox(width: 7),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.35), width: 0.8),
-                            ),
-                            child: const Text(
-                              'WIB (UTC+7)',
-                              style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                        ],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Kalender Ekonomi',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                        ),
                       ),
-                    const SizedBox(height: 2),
-                    // ForexFactory source badge
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF14201E),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: const Color(0x5500E676)),
-                          ),
-                          child: const Text(
-                            'FF + TradingView Live',
-                            style: TextStyle(color: Color(0xFF00E676), fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.3),
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        const Text(
-                          '• 14 hari ke depan',
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 9.5),
-                        ),
-                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: _isSyncing ? AppColors.appleBlue : AppColors.bullish,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: (_isSyncing ? AppColors.appleBlue : AppColors.bullish).withValues(alpha: 0.6),
-                                blurRadius: 4,
-                                spreadRadius: 1,
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      onPressed: _isSyncing ? null : () => _loadEvents(silent: false, triggerSync: true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceInset,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border, width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _isSyncing
+                                ? const CupertinoActivityIndicator(radius: 6, color: AppColors.gold)
+                                : const Icon(LucideIcons.refreshCw, size: 12, color: AppColors.gold),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Sync',
+                              style: TextStyle(
+                                color: AppColors.gold,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 5),
-                        Text(
-                          _isSyncing ? 'Sinkronisasi rilis...' : 'LIVE ACTUALS (25s)',
-                          style: TextStyle(
-                            color: _isSyncing ? AppColors.appleBlue : AppColors.bullish,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: _isSyncing ? null : () => _loadEvents(silent: false, triggerSync: true),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.border),
+                const SizedBox(height: 6),
+                // Unified Single-Line Live Status Metadata (Clean, zero stacked badges)
+                Row(
+                  children: [
+                    Container(
+                      width: 6.5,
+                      height: 6.5,
+                      decoration: BoxDecoration(
+                        color: _isSyncing ? AppColors.cyan : AppColors.bullish,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (_isSyncing ? AppColors.cyan : AppColors.bullish).withValues(alpha: 0.55),
+                            blurRadius: 5,
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _isSyncing
-                            ? const CupertinoActivityIndicator(radius: 6, color: AppColors.primary)
-                            : const Icon(LucideIcons.refreshCw, size: 12, color: AppColors.primary),
-                        const SizedBox(width: 5),
-                        const Text(
-                          'Sync',
-                          style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isSyncing ? 'Sinkronisasi...' : 'Live 25d',
+                      style: TextStyle(
+                        color: _isSyncing ? AppColors.cyan : AppColors.bullish,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Text(
+                      '  •  ',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                    ),
+                    const Text(
+                      'WIB',
+                      style: TextStyle(
+                        color: AppColors.gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Text(
+                      '  •  ',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                    ),
+                    const Flexible(
+                      child: Text(
+                        '14 Hari • FF & TradingView',
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
                         ),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // Apple Segmented Filter Bar
+          const SizedBox(height: 14),
+
+          // Full-Width Symmetric Apple Segmented Filter Bar
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: IosSegmentedControl<String>(
-                    items: const {
-                      'ALL': 'Semua',
-                      'HIGH': 'High',
-                      'MEDIUM': 'Med',
-                    },
-                    selectedValue: _selectedFilter,
-                    onValueChanged: (val) {
-                      setState(() {
-                        _selectedFilter = val;
-                      });
-                      _loadEvents();
-                    },
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: IosSegmentedControl<String>(
+              fullWidth: true,
+              items: const {
+                'ALL': 'Semua',
+                'HIGH': 'High Impact',
+                'MEDIUM': 'Medium',
+              },
+              selectedValue: _selectedFilter,
+              onValueChanged: (val) {
+                setState(() {
+                  _selectedFilter = val;
+                });
+                _loadEvents();
+              },
             ),
           ),
 
-          // Action Banner: Analisis Skenario Pre-News (9 Langkah)
+          const SizedBox(height: 12),
+
+          // Clean Pre-News Scenario CTA Card
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: _isLoadingScenario ? null : () => _openNewsScenario(),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF2E1C0C), Color(0xFF1F2432)],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.4), width: 0.9),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.30), width: 0.9),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(7),
+                      padding: const EdgeInsets.all(8.5),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(10),
+                        color: AppColors.gold.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(11),
                       ),
                       child: _isLoadingScenario
-                          ? const CupertinoActivityIndicator(radius: 7, color: AppColors.primary)
-                          : const Icon(LucideIcons.sparkles, color: AppColors.primary, size: 16),
+                          ? const CupertinoActivityIndicator(radius: 7, color: AppColors.gold)
+                          : const Icon(LucideIcons.sparkles, color: AppColors.gold, size: 16),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'ANALISIS SKENARIO PRE-NEWS (9 LANGKAH)',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
-                            ),
+                          Row(
+                            children: [
+                              const Flexible(
+                                child: Text(
+                                  'Skenario Pre-News',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: AppColors.gold.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: const Text(
+                                  '9 Langkah',
+                                  style: TextStyle(
+                                    color: AppColors.gold,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          SizedBox(height: 1),
-                          Text(
-                            'Matriks Skenario Kuat/Sesuai/Lemah, Rezim & Jalur Transmisi',
-                            style: TextStyle(color: AppColors.textMuted, fontSize: 10.5),
+                          const SizedBox(height: 3),
+                          const Text(
+                            'Matriks skenario Kuat / Sesuai / Lemah ke XAU',
+                            style: TextStyle(
+                              color: AppColors.textTertiary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
-                    const Icon(LucideIcons.chevronRight, color: AppColors.primary, size: 14),
+                    const SizedBox(width: 8),
+                    const Icon(LucideIcons.chevronRight, color: AppColors.gold, size: 15),
                   ],
                 ),
               ),
             ),
           ),
 
-          const SizedBox(height: 4),
+          const SizedBox(height: 12),
           const Divider(height: 1, color: AppColors.borderSubtle),
 
           // Events List
