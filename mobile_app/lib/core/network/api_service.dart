@@ -9,6 +9,7 @@ import '../../data/models/price_candle_model.dart';
 import '../../data/models/technical_indicators_model.dart';
 import '../../data/models/analysis_report_model.dart';
 import '../../data/models/news_intelligence_model.dart';
+import '../../data/models/signal_history_model.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -221,6 +222,34 @@ class ApiService {
       return NewsIntelligenceModel.fromJson(json.decode(response.body));
     } else {
       throw Exception('Gagal memuat analisis skenario news: ${response.statusCode}');
+    }
+  }
+
+  // 14. Signal History & Real SL / TP Outcome Tracker
+  Future<SignalHistoryResponseModel> getSignalHistory({
+    String symbol = 'XAUUSD',
+    String action = 'ALL',
+    String outcome = 'ALL',
+    int limit = 40,
+  }) async {
+    final url = '$baseUrl/signals/history/$symbol?action=$action&outcome=$outcome&limit=$limit';
+    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) {
+      return SignalHistoryResponseModel.fromJson(json.decode(response.body));
+    } else {
+      throw Exception('Gagal memuat riwayat entry: ${response.statusCode}');
+    }
+  }
+
+  // 15. Refresh Signal History Verification
+  Future<SignalHistoryResponseModel> refreshSignalHistory({String symbol = 'XAUUSD'}) async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/signals/refresh/$symbol'))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) {
+      return SignalHistoryResponseModel.fromJson(json.decode(response.body));
+    } else {
+      throw Exception('Gagal memperbarui riwayat entry: ${response.statusCode}');
     }
   }
 }

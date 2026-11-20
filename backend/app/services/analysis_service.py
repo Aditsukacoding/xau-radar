@@ -13,6 +13,7 @@ from app.models.news_article import NewsArticle
 from app.providers import get_data_provider
 from app.services.technical_calc import TechnicalCalculator
 from app.services.macro_intelligence import MacroIntelligenceService
+from app.services.signal_history_service import SignalHistoryService
 from app.providers.ai_engine import AIAgentEngine
 from app.core.config import settings
 
@@ -248,6 +249,10 @@ class AnalysisService:
         db.add(report)
         db.commit()
         db.refresh(report)
+        try:
+            SignalHistoryService.record_live_signal(db, symbol, sanitized.get("trade_setup", {}), report.created_at)
+        except Exception as e:
+            logger.debug(f"[AnalysisService] Record baseline live signal skipped: {e}")
         logger.info(f"[AnalysisService] Quantitative MTF scalping baseline generated for {symbol}.")
         return report
 
@@ -313,6 +318,7 @@ class AnalysisService:
                 or not setup.get("mtf_overview")
                 or not setup.get("entry_reasons")
                 or not setup.get("zone_proof")
+                or not setup.get("counter_setup")
                 or int(setup.get("setup_quality_score", 0) or 0) <= 0
                 or (action in ("BUY", "SELL") and (risk_pips_val > 52.0 or risk_pips_val < 28.0 or tp1_pips_val < 55.0))
             ):
@@ -541,5 +547,10 @@ class AnalysisService:
         db.add(report)
         db.commit()
         db.refresh(report)
+
+        try:
+            SignalHistoryService.record_live_signal(db, symbol, ai_res.get("trade_setup", {}), report.created_at)
+        except Exception as e:
+            logger.debug(f"[AnalysisService] Record live signal skipped: {e}")
 
         return report

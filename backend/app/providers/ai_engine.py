@@ -462,8 +462,12 @@ class AIAgentEngine:
         elif pa in ("BEARISH_REJECTION", "BEARISH_ENGULFING", "BEARISH_IMPULSE"):
             pa_boost = -0.25
 
-        # Add RSI oversold/overbought scalping edge
+        # Add RSI oversold/overbought scalping & HTF exhaustion reversal edge (100% symmetrical BUY/SELL)
         m15_rsi = m15.get("rsi_14")
+        h1_rsi = technical_data.get("rsi_14")
+        h4_rsi = h4.get("rsi_14")
+        m1_dir = str(m1.get("trend_direction", "SIDEWAYS")).upper()
+        m5_dir = str(m5.get("trend_direction", "SIDEWAYS")).upper()
         rsi_edge = 0.0
         if isinstance(m15_rsi, (int, float)):
             if m15_rsi <= 34:
@@ -474,6 +478,23 @@ class AIAgentEngine:
                 rsi_edge = 0.12
             elif 34 < m15_rsi <= 48:
                 rsi_edge = -0.12
+
+        # Extreme HTF exhaustion + LTF momentum shift (prevents stubborn one-sided bias at major bottoms/tops)
+        htf_oversold = (
+            (isinstance(h1_rsi, (int, float)) and h1_rsi <= 29)
+            or (isinstance(h4_rsi, (int, float)) and h4_rsi <= 29)
+        )
+        htf_overbought = (
+            (isinstance(h1_rsi, (int, float)) and h1_rsi >= 71)
+            or (isinstance(h4_rsi, (int, float)) and h4_rsi >= 71)
+        )
+        ltf_bull_shift = (m1_dir == "BULLISH" and m5_dir == "BULLISH") or (pa_boost > 0 and m5_dir == "BULLISH")
+        ltf_bear_shift = (m1_dir == "BEARISH" and m5_dir == "BEARISH") or (pa_boost < 0 and m5_dir == "BEARISH")
+
+        if htf_oversold and ltf_bull_shift:
+            rsi_edge += 0.34
+        elif htf_overbought and ltf_bear_shift:
+            rsi_edge -= 0.34
 
         tech_score = max(-1.0, min(1.0, base_mtf + pa_boost + rsi_edge))
 
@@ -719,6 +740,145 @@ class AIAgentEngine:
             {"title": "Proteksi SL Ketat", "tag": f"-{risk_p:.0f} pips", "tone": "bearish", "detail": sl_source_detail or default_sl_detail},
             {"title": "Target TP1–TP3", "tag": f"TP1 +{r1_p:.0f}p • {rrr}", "tone": "bullish", "detail": tp_detail},
         ]
+
+    @staticmethod
+    def _build_counter_setup(
+        primary_action: str,
+        curr_price: float,
+        primary_entry: float,
+        primary_sl: float,
+        base_risk: float,
+        atr_m15: float,
+        conf_sups: List[Dict[str, Any]],
+        conf_ress: List[Dict[str, Any]],
+        target_sups_raw: List[tuple[float, str]],
+        target_ress_raw: List[tuple[float, str]],
+    ) -> Dict[str, Any]:
+        """
+        Builds a complete opposing Key-Zone Sniper plan (BUY LIMIT at Key Demand when Primary is SELL,
+        or SELL LIMIT at Key Supply when Primary is BUY) so traders ALWAYS have a clear, disciplined
+        two-sided roadmap with exact trigger criteria ('Kapan Harus BUY / SELL?').
+        """
+        opp_action = "BUY" if primary_action != "BUY" else "SELL"
+        risk = round(max(3.00, min(5.00, base_risk)), 2)
+
+        def pick_zone(zones: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+            safe = [
+                z for z in zones
+                if 40.0 <= float(z.get("distance_pips", 0)) <= 450.0
+                and (int(z.get("htf_itf_count", 0)) >= 1 or int(z.get("touches", 0)) >= 2)
+            ]
+            if safe:
+                safe.sort(key=lambda z: int(z.get("quality_score", 70)), reverse=True)
+                return safe[0]
+            wider = [z for z in zones if float(z.get("distance_pips", 0)) >= 35.0]
+            return wider[0] if wider else (zones[0] if zones else None)
+
+        if opp_action == "BUY":
+            z = pick_zone(conf_sups)
+            if z is not None:
+                entry_p = round(float(z["price"]), 2)
+                e_low = round(float(z.get("low", entry_p - 0.65)), 2)
+                e_high = round(float(z.get("high", entry_p + 0.65)), 2)
+                q_score = int(z.get("quality_score", 78))
+                proof = str(z.get("proof_text") or "Zona Key Demand MTF terkonfirmasi")
+            else:
+                deep = sorted([lv for lv, _ in target_sups_raw if (curr_price - lv) >= 4.0], reverse=True)
+                entry_p = round(deep[0], 2) if deep else round(curr_price - max(6.00, atr_m15 * 0.9), 2)
+                e_low = round(entry_p - 0.65, 2)
+                e_high = round(entry_p + 0.65, 2)
+                q_score = 74
+                proof = f"Area Demand struktural M15/H1 (-{round(abs(curr_price - entry_p) * 10):.0f}p di bawah spot)"
+
+            if (e_high - e_low) < 0.90:
+                e_low = round(entry_p - 0.60, 2)
+                e_high = round(entry_p + 0.60, 2)
+
+            sl = round(entry_p - risk, 2)
+            if sl >= e_low - 1.20:
+                sl = round(min(e_low - 2.00, entry_p - risk), 2)
+                risk = round(max(3.00, min(5.00, entry_p - sl)), 2)
+                sl = round(entry_p - risk, 2)
+
+            tp1 = round(entry_p + 6.00, 2)
+            tp2_m = next((round(lv - 0.50, 2) for lv, _ in sorted(target_ress_raw, key=lambda x: x[0]) if (entry_p + 9.50) <= (lv - 0.50) <= (entry_p + 26.00)), None)
+            tp2 = tp2_m if tp2_m else round(entry_p + max(11.00, risk * 3.00), 2)
+            tp3_m = next((round(lv - 0.60, 2) for lv, _ in sorted(target_ress_raw, key=lambda x: x[0]) if (tp2 + 4.50) <= (lv - 0.60) <= (entry_p + 38.00)), None)
+            tp3 = tp3_m if tp3_m else round(max(tp2 + 5.50, entry_p + max(17.00, risk * 4.20)), 2)
+
+            r1 = round(tp1 - entry_p, 2)
+            r2 = round(tp2 - entry_p, 2)
+            r3 = round(tp3 - entry_p, 2)
+            dist_p = round(max(0.0, (curr_price - entry_p) * 10.0), 1)
+            breakout_ref = round(max(primary_sl, curr_price + 5.0), 2)
+            trigger = (
+                f"Kapan BUY valid: (1) Harga turun ke Key Demand ${e_low:.2f}–${e_high:.2f} lalu muncul rejection/engulfing "
+                f"buyer M5/M15, ATAU (2) Candle M15/H1 close breakout di atas ${breakout_ref:.2f} (struktur bearish batal)."
+            )
+            label = "BUY LIMIT (KEY DEMAND)"
+        else:
+            z = pick_zone(conf_ress)
+            if z is not None:
+                entry_p = round(float(z["price"]), 2)
+                e_low = round(float(z.get("low", entry_p - 0.65)), 2)
+                e_high = round(float(z.get("high", entry_p + 0.65)), 2)
+                q_score = int(z.get("quality_score", 78))
+                proof = str(z.get("proof_text") or "Zona Key Supply MTF terkonfirmasi")
+            else:
+                deep = sorted([lv for lv, _ in target_ress_raw if (lv - curr_price) >= 4.0])
+                entry_p = round(deep[0], 2) if deep else round(curr_price + max(6.00, atr_m15 * 0.9), 2)
+                e_low = round(entry_p - 0.65, 2)
+                e_high = round(entry_p + 0.65, 2)
+                q_score = 74
+                proof = f"Area Supply struktural M15/H1 (+{round(abs(entry_p - curr_price) * 10):.0f}p di atas spot)"
+
+            if (e_high - e_low) < 0.90:
+                e_low = round(entry_p - 0.60, 2)
+                e_high = round(entry_p + 0.60, 2)
+
+            sl = round(entry_p + risk, 2)
+            if sl <= e_high + 1.20:
+                sl = round(max(e_high + 2.00, entry_p + risk), 2)
+                risk = round(max(3.00, min(5.00, sl - entry_p)), 2)
+                sl = round(entry_p + risk, 2)
+
+            tp1 = round(entry_p - 6.00, 2)
+            tp2_m = next((round(lv + 0.50, 2) for lv, _ in sorted(target_sups_raw, key=lambda x: x[0], reverse=True) if (entry_p - 26.00) <= (lv + 0.50) <= (entry_p - 9.50)), None)
+            tp2 = tp2_m if tp2_m else round(entry_p - max(11.00, risk * 3.00), 2)
+            tp3_m = next((round(lv + 0.60, 2) for lv, _ in sorted(target_sups_raw, key=lambda x: x[0], reverse=True) if (entry_p - 38.00) <= (lv + 0.60) <= (tp2 - 4.50)), None)
+            tp3 = tp3_m if tp3_m else round(min(tp2 - 5.50, entry_p - max(17.00, risk * 4.20)), 2)
+
+            r1 = round(entry_p - tp1, 2)
+            r2 = round(entry_p - tp2, 2)
+            r3 = round(entry_p - tp3, 2)
+            dist_p = round(max(0.0, (entry_p - curr_price) * 10.0), 1)
+            breakdown_ref = round(min(primary_sl, curr_price - 5.0), 2)
+            trigger = (
+                f"Kapan SELL valid: (1) Harga naik ke Key Supply ${e_low:.2f}–${e_high:.2f} lalu muncul rejection/engulfing "
+                f"seller M5/M15, ATAU (2) Candle M15/H1 close breakdown di bawah ${breakdown_ref:.2f} (struktur bullish patah)."
+            )
+            label = "SELL LIMIT (KEY SUPPLY)"
+
+        return {
+            "action": opp_action,
+            "action_label": label,
+            "execution_type": "LIMIT",
+            "entry_zone": f"${e_low:.2f} - ${e_high:.2f}",
+            "entry_price": entry_p,
+            "stop_loss": sl,
+            "take_profit_1": tp1,
+            "take_profit_2": tp2,
+            "take_profit_3": tp3,
+            "risk_pips": round(risk * 10.0, 1),
+            "reward_tp1_pips": round(r1 * 10.0, 1),
+            "reward_tp2_pips": round(r2 * 10.0, 1),
+            "reward_tp3_pips": round(r3 * 10.0, 1),
+            "risk_reward_ratio": f"1 : {round(r3 / risk, 1)}" if risk > 0 else "1 : 4.0",
+            "setup_quality_score": q_score,
+            "zone_proof": proof,
+            "zone_distance_pips": dist_p,
+            "trigger_condition": trigger,
+        }
 
     @staticmethod
     def _generate_trade_setup(
@@ -1198,6 +1358,19 @@ class AIAgentEngine:
             )
             initial_status = "PENDING_LIMIT"
 
+        counter_setup = AIAgentEngine._build_counter_setup(
+            primary_action=action,
+            curr_price=curr_price,
+            primary_entry=entry_price,
+            primary_sl=stop_loss,
+            base_risk=base_risk,
+            atr_m15=atr_m15,
+            conf_sups=conf_sups,
+            conf_ress=conf_ress,
+            target_sups_raw=target_sups_raw,
+            target_ress_raw=target_ress_raw,
+        )
+
         return {
             "action": action,
             "action_label": action_label,
@@ -1228,6 +1401,7 @@ class AIAgentEngine:
             "invalidation_level": invalidation,
             "status": initial_status,
             "status_message": action_hint,
+            "counter_setup": counter_setup,
         }
 
     @staticmethod
@@ -1545,6 +1719,28 @@ class AIAgentEngine:
             action_hint = str(raw_setup.get("status_message") or "News Guard Aktif — Tunggu volatilitas mereda")
             init_status = "ACTIVE"
 
+        # Always populate opposing Key-Zone counter_setup (BUY plan when primary is SELL, and vice versa)
+        raw_counter = raw_setup.get("counter_setup")
+        if isinstance(raw_counter, dict) and raw_counter.get("entry_price") and raw_counter.get("stop_loss"):
+            counter_setup_final = raw_counter
+        else:
+            c_sups = confluence.get("confluence_supports") or []
+            c_ress = confluence.get("confluence_resistances") or []
+            t_sups = [(round(float(lv), 2), "support") for lv in valid_sups]
+            t_ress = [(round(float(lv), 2), "resistance") for lv in valid_res]
+            counter_setup_final = AIAgentEngine._build_counter_setup(
+                primary_action=action,
+                curr_price=curr_price,
+                primary_entry=entry_price,
+                primary_sl=sl,
+                base_risk=default_risk,
+                atr_m15=atr_m15,
+                conf_sups=c_sups,
+                conf_ress=c_ress,
+                target_sups_raw=t_sups,
+                target_ress_raw=t_ress,
+            )
+
         trade_setup = {
             "action": action,
             "action_label": action_label,
@@ -1575,6 +1771,7 @@ class AIAgentEngine:
             "invalidation_level": str(invalidation),
             "status": init_status,
             "status_message": action_hint,
+            "counter_setup": counter_setup_final,
         }
 
         # 5. Clean Summaries & Notes

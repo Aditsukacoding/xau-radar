@@ -9,6 +9,7 @@ class TradeSetupCard extends StatefulWidget {
   final TradeSetupModel setup;
   final VoidCallback? onViewOnChart;
   final VoidCallback? onViewChart;
+  final VoidCallback? onViewHistory;
   final bool initiallyExpanded;
 
   const TradeSetupCard({
@@ -16,6 +17,7 @@ class TradeSetupCard extends StatefulWidget {
     required this.setup,
     this.onViewOnChart,
     this.onViewChart,
+    this.onViewHistory,
     this.initiallyExpanded = true,
   });
 
@@ -25,6 +27,7 @@ class TradeSetupCard extends StatefulWidget {
 
 class _TradeSetupCardState extends State<TradeSetupCard> {
   late bool _isReasonsExpanded;
+  bool _showCounterPlan = false;
   int _selectedTfIndex = 2; // Default to M15; user can tap M1, M5, M15, M30, H1, H4, D1
 
   @override
@@ -78,30 +81,53 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
   @override
   Widget build(BuildContext context) {
     final s = widget.setup;
-    final isBuy = s.action.toUpperCase() == 'BUY';
-    final isSell = s.action.toUpperCase() == 'SELL';
-    final isInstant = s.executionType.toUpperCase() == 'INSTANT';
-    final isWait = !isBuy && !isSell;
+    final cs = s.counterSetup;
+    final bool viewingCounter = _showCounterPlan && cs != null;
+
+    final String activeAction = viewingCounter ? cs.action : s.action;
+    final String activeExecType = viewingCounter ? cs.executionType : s.executionType;
+    final bool isBuy = activeAction.toUpperCase() == 'BUY';
+    final bool isSell = activeAction.toUpperCase() == 'SELL';
+    final bool isInstant = activeExecType.toUpperCase() == 'INSTANT';
+    final bool isWait = !isBuy && !isSell;
 
     final Color actionColor = isBuy
         ? AppColors.bullish
         : (isSell ? AppColors.bearish : AppColors.gold);
 
-    final String heroActionTitle = s.actionLabel.isNotEmpty
-        ? s.actionLabel
-        : (isBuy
-            ? (isInstant ? 'BUY NOW (SNIPER)' : 'BUY LIMIT (SNIPER)')
-            : (isSell
-                ? (isInstant ? 'SELL NOW (SNIPER)' : 'SELL LIMIT (SNIPER)')
-                : 'WAIT • NEWS GUARD'));
+    final String heroActionTitle = viewingCounter
+        ? cs.actionLabel
+        : (s.actionLabel.isNotEmpty
+            ? s.actionLabel
+            : (isBuy
+                ? (isInstant ? 'BUY NOW (SNIPER)' : 'BUY LIMIT (SNIPER)')
+                : (isSell
+                    ? (isInstant ? 'SELL NOW (SNIPER)' : 'SELL LIMIT (SNIPER)')
+                    : 'WAIT • NEWS GUARD')));
+
+    final String activeStatusMsg = viewingCounter ? cs.triggerCondition : s.safeStatusMessage;
+    final String activeRrr = viewingCounter ? cs.riskRewardRatio : s.riskRewardRatio;
+    final int activeQuality = viewingCounter ? cs.setupQualityScore : s.setupQualityScore;
+    final String activeProof = viewingCounter ? cs.zoneProof : s.zoneProof;
+    final String activeEntryZone = viewingCounter ? cs.entryZone : s.entryZone;
+    final double activeEntryPrice = viewingCounter ? cs.entryPrice : s.entryPrice;
+    final double activeZoneDist = viewingCounter ? cs.zoneDistancePips : s.zoneDistancePips;
+    final double activeSl = viewingCounter ? cs.stopLoss : s.stopLoss;
+    final double activeRiskPips = viewingCounter ? cs.riskPips : s.riskPips;
+    final double activeTp1 = viewingCounter ? cs.takeProfit1 : s.takeProfit1;
+    final double activeTp2 = viewingCounter ? cs.takeProfit2 : s.takeProfit2;
+    final double activeTp3 = viewingCounter ? cs.takeProfit3 : s.takeProfit3;
+    final double activeR1 = viewingCounter ? cs.rewardTp1Pips : s.rewardTp1Pips;
+    final double activeR2 = viewingCounter ? cs.rewardTp2Pips : s.rewardTp2Pips;
+    final double activeR3 = viewingCounter ? cs.rewardTp3Pips : s.rewardTp3Pips;
 
     final IconData heroIcon = isWait
         ? LucideIcons.shieldAlert
         : (isInstant ? LucideIcons.zap : LucideIcons.crosshair);
 
     final setupStatus = s.safeStatus.toUpperCase();
-    final isTp1Hit = setupStatus.contains('TP1') || setupStatus.contains('TP2');
-    final isTp2Hit = setupStatus.contains('TP2');
+    final isTp1Hit = !viewingCounter && (setupStatus.contains('TP1') || setupStatus.contains('TP2'));
+    final isTp2Hit = !viewingCounter && setupStatus.contains('TP2');
 
     return IosGlassCard(
       borderRadius: 22,
@@ -163,6 +189,130 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
           ),
           const SizedBox(height: 12),
 
+          // Dual-Side Plan Switcher: Utama (Follow Trend) vs Rencana Lawan Arah (Kapan BUY / SELL?)
+          if (cs != null && cs.entryPrice > 0) ...[
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceInset,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border, width: 0.8),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _showCounterPlan = false),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: !viewingCounter
+                              ? (s.action.toUpperCase() == 'BUY'
+                                  ? AppColors.bullish.withValues(alpha: 0.16)
+                                  : AppColors.bearish.withValues(alpha: 0.16))
+                              : CupertinoColors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: !viewingCounter
+                                ? (s.action.toUpperCase() == 'BUY'
+                                    ? AppColors.bullish.withValues(alpha: 0.45)
+                                    : AppColors.bearish.withValues(alpha: 0.45))
+                                : CupertinoColors.transparent,
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              s.action.toUpperCase() == 'BUY'
+                                  ? LucideIcons.trendingUp
+                                  : LucideIcons.trendingDown,
+                              size: 13,
+                              color: !viewingCounter
+                                  ? (s.action.toUpperCase() == 'BUY'
+                                      ? AppColors.bullish
+                                      : AppColors.bearish)
+                                  : AppColors.textMuted,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Utama: ${s.action.toUpperCase()}',
+                              style: TextStyle(
+                                color: !viewingCounter
+                                    ? AppColors.textPrimary
+                                    : AppColors.textMuted,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _showCounterPlan = true),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: viewingCounter
+                              ? (cs.action == 'BUY'
+                                  ? AppColors.bullish.withValues(alpha: 0.16)
+                                  : AppColors.bearish.withValues(alpha: 0.16))
+                              : CupertinoColors.transparent,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: viewingCounter
+                                ? (cs.action == 'BUY'
+                                    ? AppColors.bullish.withValues(alpha: 0.45)
+                                    : AppColors.bearish.withValues(alpha: 0.45))
+                                : CupertinoColors.transparent,
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              cs.action == 'BUY'
+                                  ? LucideIcons.trendingUp
+                                  : LucideIcons.trendingDown,
+                              size: 13,
+                              color: viewingCounter
+                                  ? (cs.action == 'BUY'
+                                      ? AppColors.bullish
+                                      : AppColors.bearish)
+                                  : AppColors.textMuted,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Rencana ${cs.action}',
+                              style: TextStyle(
+                                color: viewingCounter
+                                    ? AppColors.textPrimary
+                                    : AppColors.textSecondary,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 11),
+          ],
+
           // Action Hero Banner (Signal + RRR + 1-line clear instruction)
           Container(
             width: double.infinity,
@@ -208,7 +358,7 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                         border: Border.all(color: AppColors.cyan.withValues(alpha: 0.35), width: 0.8),
                       ),
                       child: Text(
-                        'RRR ${s.riskRewardRatio}',
+                        'RRR $activeRrr',
                         style: AppTypography.mono(
                           color: AppColors.cyan,
                           fontSize: 10.5,
@@ -220,26 +370,28 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                 ),
                 const SizedBox(height: 9),
                 Text(
-                  s.safeStatusMessage,
+                  activeStatusMsg,
                   style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 12,
-                    height: 1.4,
+                    height: 1.42,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
 
                 // Quality Score Bar + Concrete Historical Candle Proof
-                if (s.setupQualityScore > 0 || s.zoneProof.isNotEmpty) ...[
+                if (activeQuality > 0 || activeProof.isNotEmpty) ...[
                   const SizedBox(height: 11),
                   Container(height: 0.7, color: actionColor.withValues(alpha: 0.20)),
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Kualitas Key Zone',
-                        style: TextStyle(
+                      Text(
+                        viewingCounter
+                            ? 'Kualitas Zona Alternatif (${cs.action})'
+                            : 'Kualitas Key Zone',
+                        style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
@@ -249,19 +401,19 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            s.setupQualityScore >= 80
+                            activeQuality >= 80
                                 ? 'Kuat • '
-                                : (s.setupQualityScore >= 70 ? 'Valid • ' : 'Moderat • '),
+                                : (activeQuality >= 70 ? 'Valid • ' : 'Moderat • '),
                             style: TextStyle(
-                              color: s.setupQualityScore >= 80 ? AppColors.bullish : AppColors.gold,
+                              color: activeQuality >= 80 ? AppColors.bullish : AppColors.gold,
                               fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           Text(
-                            '${s.setupQualityScore}/100',
+                            '$activeQuality/100',
                             style: AppTypography.mono(
-                              color: s.setupQualityScore >= 80 ? AppColors.bullish : AppColors.gold,
+                              color: activeQuality >= 80 ? AppColors.bullish : AppColors.gold,
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
                             ),
@@ -279,17 +431,17 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                       color: AppColors.surfaceInset,
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
-                        widthFactor: (s.setupQualityScore.clamp(10, 100)) / 100.0,
+                        widthFactor: (activeQuality.clamp(10, 100)) / 100.0,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: s.setupQualityScore >= 80 ? AppColors.bullish : AppColors.gold,
+                            color: activeQuality >= 80 ? AppColors.bullish : AppColors.gold,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
                       ),
                     ),
                   ),
-                  if (s.zoneProof.isNotEmpty) ...[
+                  if (activeProof.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -301,7 +453,7 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'Bukti: ${s.zoneProof}',
+                            'Bukti: $activeProof',
                             style: const TextStyle(
                               color: AppColors.textSecondary,
                               fontSize: 11,
@@ -325,9 +477,9 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'LEVEL EKSEKUSI',
-                style: TextStyle(
+              Text(
+                viewingCounter ? 'LEVEL ALTERNATIF (${cs.action})' : 'LEVEL EKSEKUSI',
+                style: const TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
@@ -352,10 +504,12 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
               Expanded(
                 child: _buildPrimaryTile(
                   label: 'ZONA ENTRI',
-                  value: s.entryZone.isNotEmpty ? s.entryZone : '\$${s.entryPrice.toStringAsFixed(2)}',
-                  badge: (!isInstant && s.zoneDistancePips >= 10)
-                      ? 'Limit \$${s.entryPrice.toStringAsFixed(2)} (${isBuy ? '-' : '+'}${s.zoneDistancePips.toStringAsFixed(0)}p)'
-                      : '${isInstant ? 'Market' : 'Limit'} \$${s.entryPrice.toStringAsFixed(2)}',
+                  value: activeEntryZone.isNotEmpty
+                      ? activeEntryZone
+                      : '\$${activeEntryPrice.toStringAsFixed(2)}',
+                  badge: (!isInstant && activeZoneDist >= 10)
+                      ? 'Limit \$${activeEntryPrice.toStringAsFixed(2)} (${isBuy ? '-' : '+'}${activeZoneDist.toStringAsFixed(0)}p)'
+                      : '${isInstant ? 'Market' : 'Limit'} \$${activeEntryPrice.toStringAsFixed(2)}',
                   valueColor: AppColors.textPrimary,
                   accentColor: AppColors.cyan,
                 ),
@@ -364,8 +518,8 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
               Expanded(
                 child: _buildPrimaryTile(
                   label: 'STOP LOSS (SL)',
-                  value: '\$${s.stopLoss.toStringAsFixed(2)}',
-                  badge: s.riskPips > 0 ? '-${s.riskPips.toStringAsFixed(0)} pips' : 'Ketat',
+                  value: '\$${activeSl.toStringAsFixed(2)}',
+                  badge: activeRiskPips > 0 ? '-${activeRiskPips.toStringAsFixed(0)} pips' : 'Ketat',
                   valueColor: AppColors.bearish,
                   accentColor: AppColors.bearish,
                 ),
@@ -381,8 +535,8 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                 child: _buildTargetTile(
                   tier: 'TP 1',
                   lotPct: '40%',
-                  value: '\$${s.takeProfit1.toStringAsFixed(2)}',
-                  pips: s.rewardTp1Pips > 0 ? '+${s.rewardTp1Pips.toStringAsFixed(0)}p' : '+60p',
+                  value: '\$${activeTp1.toStringAsFixed(2)}',
+                  pips: activeR1 > 0 ? '+${activeR1.toStringAsFixed(0)}p' : '+60p',
                   actionHint: 'SL → BEP',
                   accentColor: AppColors.bullish,
                   isHit: isTp1Hit,
@@ -393,8 +547,8 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                 child: _buildTargetTile(
                   tier: 'TP 2',
                   lotPct: '40%',
-                  value: '\$${s.takeProfit2.toStringAsFixed(2)}',
-                  pips: s.rewardTp2Pips > 0 ? '+${s.rewardTp2Pips.toStringAsFixed(0)}p' : 'Struktur',
+                  value: '\$${activeTp2.toStringAsFixed(2)}',
+                  pips: activeR2 > 0 ? '+${activeR2.toStringAsFixed(0)}p' : 'Struktur',
                   actionHint: 'SL → TP1',
                   accentColor: AppColors.bullish,
                   isHit: isTp2Hit,
@@ -405,8 +559,8 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                 child: _buildTargetTile(
                   tier: 'TP 3',
                   lotPct: '20%',
-                  value: '\$${s.takeProfit3.toStringAsFixed(2)}',
-                  pips: s.rewardTp3Pips > 0 ? '+${s.rewardTp3Pips.toStringAsFixed(0)}p' : 'Runner',
+                  value: '\$${activeTp3.toStringAsFixed(2)}',
+                  pips: activeR3 > 0 ? '+${activeR3.toStringAsFixed(0)}p' : 'Runner',
                   actionHint: 'Runner',
                   accentColor: AppColors.gold,
                   isHit: false,
@@ -419,8 +573,10 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
           // ═══════════════════════════════════════════════════════════════════
           // BLOK 3: KENAPA ENTRY INI? (4 POIN TERSTRUKTUR — TERBUKA LANGSUNG!)
           // ═══════════════════════════════════════════════════════════════════
-          _buildEntryReasonsSection(s),
-          const SizedBox(height: 14),
+          if (!viewingCounter) ...[
+            _buildEntryReasonsSection(s),
+            const SizedBox(height: 14),
+          ],
 
           // ═══════════════════════════════════════════════════════════════════
           // BLOK 4: VERIFIKASI 7 TIMEFRAME (M1–D1 INTERAKTIF, RAPI 2 BARIS)
@@ -431,34 +587,71 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
           ],
 
           // ═══════════════════════════════════════════════════════════════════
-          // BLOK 5: CTA CHART TRADINGVIEW
+          // BLOK 5: CTA CHART TRADINGVIEW & RIWAYAT SL/TP
           // ═══════════════════════════════════════════════════════════════════
-          if (widget.onViewChart != null || widget.onViewOnChart != null)
-            SizedBox(
-              width: double.infinity,
-              child: CupertinoButton(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                color: AppColors.surfaceElevated,
-                borderRadius: BorderRadius.circular(13),
-                onPressed: widget.onViewChart ?? widget.onViewOnChart,
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(LucideIcons.chartCandlestick, color: AppColors.gold, size: 15),
-                    SizedBox(width: 8),
-                    Text(
-                      'Lihat Chart TradingView',
-                      style: TextStyle(
-                        color: AppColors.gold,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
+          if (widget.onViewChart != null || widget.onViewOnChart != null || widget.onViewHistory != null)
+            Row(
+              children: [
+                if (widget.onViewChart != null || widget.onViewOnChart != null)
+                  Expanded(
+                    child: CupertinoButton(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      color: AppColors.surfaceElevated,
+                      borderRadius: BorderRadius.circular(13),
+                      onPressed: widget.onViewChart ?? widget.onViewOnChart,
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(LucideIcons.chartCandlestick, color: AppColors.gold, size: 14.5),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Chart TV',
+                              style: TextStyle(
+                                color: AppColors.gold,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(width: 4),
-                    Icon(LucideIcons.chevronRight, color: AppColors.gold, size: 13),
-                  ],
-                ),
-              ),
+                  ),
+                if ((widget.onViewChart != null || widget.onViewOnChart != null) &&
+                    widget.onViewHistory != null)
+                  const SizedBox(width: 9),
+                if (widget.onViewHistory != null)
+                  Expanded(
+                    child: CupertinoButton(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      color: AppColors.gold.withValues(alpha: 0.13),
+                      borderRadius: BorderRadius.circular(13),
+                      onPressed: widget.onViewHistory,
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(LucideIcons.history, color: AppColors.gold, size: 14.5),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Riwayat SL/TP',
+                              style: TextStyle(
+                                color: AppColors.gold,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
         ],
       ),

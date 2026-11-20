@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
+import app.models  # noqa: F401 - register all SQLAlchemy tables including TradeSignalHistory
 from app.api.v1.router import api_router
 from app.services.ingestion_service import IngestionService
 from app.services.analysis_service import AnalysisService

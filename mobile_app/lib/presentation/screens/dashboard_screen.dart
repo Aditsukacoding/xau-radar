@@ -699,6 +699,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               TradeSetupCard(
                 setup: data.tradeSetup!,
                 onViewChart: () => widget.onNavigateTab?.call(3),
+                onViewHistory: () => widget.onNavigateTab?.call(4),
               ),
               const SizedBox(height: 16),
             ],

@@ -5,6 +5,7 @@ from app.api.v1.endpoints_geopolitical import router as geopolitical_router
 from app.api.v1.endpoints_technical import router as technical_router
 from app.api.v1.endpoints_analysis import router as analysis_router
 from app.api.v1.endpoints_news_intelligence import router as news_intelligence_router
+from app.api.v1.endpoints_history import router as history_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -14,3 +15,4 @@ api_router.include_router(geopolitical_router, prefix="/geopolitical", tags=["Ge
 api_router.include_router(technical_router, prefix="/technical", tags=["Technical Module"])
 api_router.include_router(analysis_router, prefix="/analysis", tags=["AI Analysis Engine"])
 api_router.include_router(news_intelligence_router, prefix="/news-intelligence", tags=["News Intelligence Scenario Planning"])
+api_router.include_router(history_router, prefix="/signals", tags=["Signal History & SL/TP Tracker"])

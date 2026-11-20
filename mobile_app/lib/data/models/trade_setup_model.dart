@@ -70,6 +70,92 @@ class EntryReasonItem {
       };
 }
 
+class CounterSetupModel {
+  final String action; // BUY | SELL
+  final String actionLabel;
+  final String executionType;
+  final String entryZone;
+  final double entryPrice;
+  final double stopLoss;
+  final double takeProfit1;
+  final double takeProfit2;
+  final double takeProfit3;
+  final double riskPips;
+  final double rewardTp1Pips;
+  final double rewardTp2Pips;
+  final double rewardTp3Pips;
+  final String riskRewardRatio;
+  final int setupQualityScore;
+  final String zoneProof;
+  final double zoneDistancePips;
+  final String triggerCondition;
+
+  const CounterSetupModel({
+    required this.action,
+    required this.actionLabel,
+    this.executionType = 'LIMIT',
+    required this.entryZone,
+    required this.entryPrice,
+    required this.stopLoss,
+    required this.takeProfit1,
+    required this.takeProfit2,
+    required this.takeProfit3,
+    required this.riskPips,
+    this.rewardTp1Pips = 60.0,
+    required this.rewardTp2Pips,
+    required this.rewardTp3Pips,
+    this.riskRewardRatio = '1 : 3.5',
+    this.setupQualityScore = 76,
+    this.zoneProof = '',
+    this.zoneDistancePips = 0.0,
+    this.triggerCondition = '',
+  });
+
+  factory CounterSetupModel.fromJson(Map<String, dynamic> json) {
+    return CounterSetupModel(
+      action: json['action']?.toString().toUpperCase() ?? 'BUY',
+      actionLabel: json['action_label']?.toString() ?? 'BUY LIMIT (KEY DEMAND)',
+      executionType: json['execution_type']?.toString().toUpperCase() ?? 'LIMIT',
+      entryZone: json['entry_zone']?.toString() ?? '',
+      entryPrice: (json['entry_price'] as num?)?.toDouble() ?? 0.0,
+      stopLoss: (json['stop_loss'] as num?)?.toDouble() ?? 0.0,
+      takeProfit1: (json['take_profit_1'] as num?)?.toDouble() ?? 0.0,
+      takeProfit2: (json['take_profit_2'] as num?)?.toDouble() ?? 0.0,
+      takeProfit3: (json['take_profit_3'] as num?)?.toDouble() ?? 0.0,
+      riskPips: (json['risk_pips'] as num?)?.toDouble() ?? 40.0,
+      rewardTp1Pips: (json['reward_tp1_pips'] as num?)?.toDouble() ?? 60.0,
+      rewardTp2Pips: (json['reward_tp2_pips'] as num?)?.toDouble() ?? 110.0,
+      rewardTp3Pips: (json['reward_tp3_pips'] as num?)?.toDouble() ?? 170.0,
+      riskRewardRatio: json['risk_reward_ratio']?.toString() ?? '1 : 3.5',
+      setupQualityScore: (json['setup_quality_score'] as num?)?.toInt() ?? 76,
+      zoneProof: json['zone_proof']?.toString() ?? '',
+      zoneDistancePips: (json['zone_distance_pips'] as num?)?.toDouble() ?? 0.0,
+      triggerCondition: json['trigger_condition']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'action': action,
+        'action_label': actionLabel,
+        'execution_type': executionType,
+        'entry_zone': entryZone,
+        'entry_price': entryPrice,
+        'stop_loss': stopLoss,
+        'take_profit_1': takeProfit1,
+        'take_profit_2': takeProfit2,
+        'take_profit_3': takeProfit3,
+        'risk_pips': riskPips,
+        'reward_tp1_pips': rewardTp1Pips,
+        'reward_tp2_pips': rewardTp2Pips,
+        'reward_tp3_pips': rewardTp3Pips,
+        'risk_reward_ratio': riskRewardRatio,
+        'setup_quality_score': setupQualityScore,
+        'zone_proof': zoneProof,
+        'zone_distance_pips': zoneDistancePips,
+        'trigger_condition': triggerCondition,
+      };
+}
+
 class TradeSetupModel {
   final String action; // BUY, SELL, WAIT
   final String actionLabel; // BUY NOW (SCALP), SELL LIMIT (CONFLUENCE), etc.
@@ -100,6 +186,7 @@ class TradeSetupModel {
   final String invalidationLevel;
   final String? status;
   final String? statusMessage;
+  final CounterSetupModel? counterSetup;
 
   String get safeStatus => status ?? 'ACTIVE';
   String get safeStatusMessage => (statusMessage != null && statusMessage!.isNotEmpty)
@@ -136,6 +223,7 @@ class TradeSetupModel {
     required this.invalidationLevel,
     this.status = 'ACTIVE',
     this.statusMessage = 'Setup Scalping Aktif',
+    this.counterSetup,
   });
 
   factory TradeSetupModel.fromJson(Map<String, dynamic> json) {
@@ -201,6 +289,9 @@ class TradeSetupModel {
       invalidationLevel: json['invalidation_level'] ?? '',
       status: json['status']?.toString() ?? 'ACTIVE',
       statusMessage: json['status_message']?.toString() ?? 'Setup Scalping Aktif',
+      counterSetup: (json['counter_setup'] is Map)
+          ? CounterSetupModel.fromJson(Map<String, dynamic>.from(json['counter_setup']))
+          : null,
     );
   }
 
@@ -235,6 +326,7 @@ class TradeSetupModel {
       'invalidation_level': invalidationLevel,
       'status': status,
       'status_message': statusMessage,
+      'counter_setup': counterSetup?.toJson(),
     };
   }
 }

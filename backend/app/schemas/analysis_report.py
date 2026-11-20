@@ -8,6 +8,27 @@ class KeyLevels(BaseModel):
     resistance: List[float] = []
 
 
+class CounterSetup(BaseModel):
+    action: str  # BUY | SELL (opposing side of primary setup)
+    action_label: str  # e.g. BUY LIMIT (KEY DEMAND) | SELL LIMIT (KEY SUPPLY)
+    execution_type: str = "LIMIT"
+    entry_zone: str = ""
+    entry_price: float = 0.0
+    stop_loss: float = 0.0
+    take_profit_1: float = 0.0
+    take_profit_2: float = 0.0
+    take_profit_3: float = 0.0
+    risk_pips: float = 0.0
+    reward_tp1_pips: float = 60.0
+    reward_tp2_pips: float = 0.0
+    reward_tp3_pips: float = 0.0
+    risk_reward_ratio: str = "1 : 3.5"
+    setup_quality_score: int = 76
+    zone_proof: str = ""
+    zone_distance_pips: float = 0.0
+    trigger_condition: str = ""  # Clear rule: exact price / candle confirmation to activate this opposing plan
+
+
 class TradeSetup(BaseModel):
     action: str = "WAIT"  # BUY, SELL, WAIT
     action_label: str = "WAIT / STANDBY"  # e.g. BUY NOW (SCALP), SELL LIMIT (PULLBACK)
@@ -38,6 +59,7 @@ class TradeSetup(BaseModel):
     invalidation_level: str = ""
     status: str = "ACTIVE"  # ACTIVE, RUNNING_TP1_HIT, RUNNING_TP2_HIT, COMPLETED, STOPPED_OUT
     status_message: str = "Setup Scalping Aktif (Siap Eksekusi)"
+    counter_setup: Optional[CounterSetup] = None  # Opposing Key-Zone plan (BUY plan if primary is SELL, and vice versa)
 
 
 class AnalysisReportBase(BaseModel):
