@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
 class AppTypography {
-  static const String uiFamily = 'PlusJakartaSans';
-  static const String monoFamily = 'JetBrainsMono';
+  static const String uiFamily = 'DMSans';
+  static const String monoFamily = 'DMSans';
 
   static TextStyle mono({
     double fontSize = 13,

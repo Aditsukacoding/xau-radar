@@ -407,7 +407,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                                           const SizedBox(height: 6),
                                           ...(_report!.keyLevels.support.map((s) => Text(
                                                 '\$${s.toStringAsFixed(2)}',
-                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'JetBrainsMono', fontWeight: FontWeight.w700),
+                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'DMSans', fontFeatures: [FontFeature.tabularFigures()], fontWeight: FontWeight.w700),
                                               ))),
                                         ],
                                       ),
@@ -432,7 +432,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                                           const SizedBox(height: 6),
                                           ...(_report!.keyLevels.resistance.map((r) => Text(
                                                 '\$${r.toStringAsFixed(2)}',
-                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'JetBrainsMono', fontWeight: FontWeight.w700),
+                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'DMSans', fontFeatures: [FontFeature.tabularFigures()], fontWeight: FontWeight.w700),
                                               ))),
                                         ],
                                       ),

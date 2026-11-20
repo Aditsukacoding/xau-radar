@@ -478,7 +478,7 @@ class NewsDetailSheet extends StatelessWidget {
                                     color: sentimentColor,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w800,
-                                    fontFamily: 'JetBrainsMono',
+                                    fontFamily: 'DMSans', fontFeatures: [FontFeature.tabularFigures()],
                                   ),
                                 ),
                                 const SizedBox(width: 10),
