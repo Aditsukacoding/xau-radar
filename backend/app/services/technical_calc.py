@@ -387,3 +387,176 @@ class TechnicalCalculator:
             summary = "Struktur teknikal Sideways/Range: " + "; ".join(reasons) + "."
 
         return direction, summary
+
+    @staticmethod
+    def analyze_mtf_confluence(
+        mtf_map: Dict[str, Dict[str, Any]],
+        curr_price: float,
+    ) -> Dict[str, Any]:
+        """
+        Synthesizes all 7 timeframes (M1, M5, M15, M30, H1, H4, D1) into:
+        - Per-timeframe directional & S/R comparison matrix (mtf_overview)
+        - Top-Down Alignment (HTF D1/H4/H1 vs ITF M30/M15 vs LTF M5/M1)
+        - Cross-Timeframe Confluence Support & Resistance clusters (overlapping zones across TFs)
+        """
+        ordered_tfs = [
+            ("1m", "M1", 0.7),
+            ("5m", "M5", 1.0),
+            ("15m", "M15", 1.4),
+            ("30m", "M30", 1.6),
+            ("1h", "H1", 2.0),
+            ("4h", "H4", 2.5),
+            ("1d", "D1", 3.0),
+        ]
+
+        overview: List[Dict[str, Any]] = []
+        all_sups: List[Tuple[float, str, float]] = []
+        all_res: List[Tuple[float, str, float]] = []
+
+        bull_cnt = 0
+        bear_cnt = 0
+        side_cnt = 0
+        weighted_dir = 0.0
+        total_weight = 0.0
+
+        def dir_val(t: str) -> float:
+            u = str(t or "").upper()
+            return 1.0 if u == "BULLISH" else (-1.0 if u == "BEARISH" else 0.0)
+
+        for key, label, weight in ordered_tfs:
+            td = mtf_map.get(key) or {}
+            trend = str(td.get("trend_direction", "SIDEWAYS")).upper()
+            if trend not in ("BULLISH", "BEARISH", "SIDEWAYS"):
+                trend = "SIDEWAYS"
+
+            if trend == "BULLISH":
+                bull_cnt += 1
+            elif trend == "BEARISH":
+                bear_cnt += 1
+            else:
+                side_cnt += 1
+
+            weighted_dir += dir_val(trend) * weight
+            total_weight += weight
+
+            sups = [float(x) for x in (td.get("support_levels") or []) if float(x) < curr_price]
+            ress = [float(x) for x in (td.get("resistance_levels") or []) if float(x) > curr_price]
+            sw_lows = [float(x) for x in (td.get("swing_lows") or []) if float(x) < curr_price]
+            sw_highs = [float(x) for x in (td.get("swing_highs") or []) if float(x) > curr_price]
+
+            nearest_sup = round(max(sups), 2) if sups else round(curr_price - 5.0, 2)
+            nearest_res = round(min(ress), 2) if ress else round(curr_price + 5.0, 2)
+
+            for s in set(sups[:2] + sw_lows[:2]):
+                all_sups.append((round(s, 2), label, weight))
+            for r in set(ress[:2] + sw_highs[:2]):
+                all_res.append((round(r, 2), label, weight))
+
+            overview.append({
+                "tf": label,
+                "trend": trend,
+                "rsi": round(float(td["rsi_14"]), 1) if td.get("rsi_14") is not None else None,
+                "atr_pips": round(float(td.get("atr_pips", 0.0)), 1),
+                "sup": nearest_sup,
+                "res": nearest_res,
+                "pa": str(td.get("price_action", "CONSOLIDATION")),
+            })
+
+        # Cluster overlapping levels across timeframes (within $3.20 band)
+        def build_clusters(points: List[Tuple[float, str, float]], sort_desc: bool) -> List[Dict[str, Any]]:
+            if not points:
+                return []
+            ordered = sorted(points, key=lambda x: x[0], reverse=sort_desc)
+            clusters: List[List[Tuple[float, str, float]]] = []
+            for pt in ordered:
+                placed = False
+                for cl in clusters:
+                    avg_p = sum(x[0] for x in cl) / len(cl)
+                    if abs(pt[0] - avg_p) <= 3.20:
+                        cl.append(pt)
+                        placed = True
+                        break
+                if not placed:
+                    clusters.append([pt])
+
+            formatted: List[Dict[str, Any]] = []
+            for cl in clusters:
+                tfs_unique = list(dict.fromkeys(x[1] for x in cl))
+                w_sum = sum(x[2] for x in cl)
+                w_avg = round(sum(x[0] * x[2] for x in cl) / w_sum, 2) if w_sum > 0 else round(cl[0][0], 2)
+                formatted.append({
+                    "price": w_avg,
+                    "low": round(min(x[0] for x in cl), 2),
+                    "high": round(max(x[0] for x in cl), 2),
+                    "timeframes": tfs_unique,
+                    "tf_count": len(tfs_unique),
+                    "weight": round(w_sum, 2),
+                })
+
+            # Prioritize multi-TF clusters close to live price (proximity-weighted confluence)
+            formatted.sort(
+                key=lambda c: (
+                    c["tf_count"] >= 2,
+                    c["weight"] / (1.0 + abs(c["price"] - curr_price) / 20.0),
+                ),
+                reverse=True,
+            )
+            return formatted[:4]
+
+        conf_supports = build_clusters(all_sups, sort_desc=True)
+        conf_resistances = build_clusters(all_res, sort_desc=False)
+
+        # Tiered perspective comparison: HTF (D1/H4/H1) vs ITF (M30/M15) vs LTF (M5/M1)
+        def group_bias(keys: List[str]) -> str:
+            sc = sum(dir_val((mtf_map.get(k) or {}).get("trend_direction", "SIDEWAYS")) for k in keys)
+            return "BULLISH" if sc >= 1 else ("BEARISH" if sc <= -1 else "SIDEWAYS")
+
+        htf_bias = group_bias(["1d", "4h", "1h"])
+        itf_bias = group_bias(["30m", "15m"])
+        ltf_bias = group_bias(["5m", "1m"])
+
+        mtf_score = round(weighted_dir / total_weight, 3) if total_weight > 0 else 0.0
+
+        if bull_cnt >= 5:
+            alignment_label = f"{bull_cnt}/7 BULLISH • Selaras Kuat"
+        elif bear_cnt >= 5:
+            alignment_label = f"{bear_cnt}/7 BEARISH • Selaras Kuat"
+        elif htf_bias != ltf_bias and htf_bias != "SIDEWAYS" and ltf_bias != "SIDEWAYS":
+            alignment_label = f"HTF {htf_bias} • LTF {ltf_bias} (Pullback)"
+        elif bull_cnt > bear_cnt:
+            alignment_label = f"{bull_cnt}/7 BULLISH • Moderat"
+        elif bear_cnt > bull_cnt:
+            alignment_label = f"{bear_cnt}/7 BEARISH • Moderat"
+        else:
+            alignment_label = f"MIXED ({bull_cnt}B / {bear_cnt}S / {side_cnt}R)"
+
+        top_sup_str = (
+            f"${conf_supports[0]['price']:.2f} ({'+'.join(conf_supports[0]['timeframes'])})"
+            if conf_supports
+            else "-"
+        )
+        top_res_str = (
+            f"${conf_resistances[0]['price']:.2f} ({'+'.join(conf_resistances[0]['timeframes'])})"
+            if conf_resistances
+            else "-"
+        )
+
+        confluence_note = (
+            f"Top-Down {alignment_label} (HTF {htf_bias} | ITF {itf_bias} | LTF {ltf_bias}). "
+            f"Zona konfluensi kuat: Support {top_sup_str} & Resistance {top_res_str}."
+        )
+
+        return {
+            "overview": overview,
+            "htf_bias": htf_bias,
+            "itf_bias": itf_bias,
+            "ltf_bias": ltf_bias,
+            "bullish_count": bull_cnt,
+            "bearish_count": bear_cnt,
+            "sideways_count": side_cnt,
+            "mtf_score": mtf_score,
+            "alignment_label": alignment_label,
+            "confluence_supports": conf_supports,
+            "confluence_resistances": conf_resistances,
+            "confluence_note": confluence_note,
+        }

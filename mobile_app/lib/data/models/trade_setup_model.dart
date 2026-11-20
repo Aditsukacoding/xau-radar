@@ -1,10 +1,55 @@
+class MtfTimeframeItem {
+  final String tf; // M1, M5, M15, M30, H1, H4, D1
+  final String trend; // BULLISH, BEARISH, SIDEWAYS
+  final double? rsi;
+  final double atrPips;
+  final double sup;
+  final double res;
+  final String pa;
+
+  const MtfTimeframeItem({
+    required this.tf,
+    required this.trend,
+    this.rsi,
+    this.atrPips = 0.0,
+    this.sup = 0.0,
+    this.res = 0.0,
+    this.pa = '',
+  });
+
+  factory MtfTimeframeItem.fromJson(Map<String, dynamic> json) {
+    return MtfTimeframeItem(
+      tf: json['tf']?.toString() ?? 'M15',
+      trend: json['trend']?.toString().toUpperCase() ?? 'SIDEWAYS',
+      rsi: (json['rsi'] as num?)?.toDouble(),
+      atrPips: (json['atr_pips'] as num?)?.toDouble() ?? 0.0,
+      sup: (json['sup'] as num?)?.toDouble() ?? 0.0,
+      res: (json['res'] as num?)?.toDouble() ?? 0.0,
+      pa: json['pa']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'tf': tf,
+        'trend': trend,
+        'rsi': rsi,
+        'atr_pips': atrPips,
+        'sup': sup,
+        'res': res,
+        'pa': pa,
+      };
+}
+
 class TradeSetupModel {
   final String action; // BUY, SELL, WAIT
-  final String actionLabel; // BUY NOW (SCALP), SELL LIMIT (RALLY), etc.
+  final String actionLabel; // BUY NOW (SCALP), SELL LIMIT (CONFLUENCE), etc.
   final String executionType; // INSTANT, LIMIT, WAIT
-  final String scalpTimeframe; // M5 / M15
+  final String scalpTimeframe; // M1–D1 MTF
   final String sessionName;
   final double atrPips;
+  final String mtfAlignment;
+  final List<MtfTimeframeItem> mtfOverview;
+  final String confluenceNote;
   final String entryZone;
   final double entryPrice;
   final double stopLoss;
@@ -31,9 +76,12 @@ class TradeSetupModel {
     required this.action,
     required this.actionLabel,
     this.executionType = 'INSTANT',
-    this.scalpTimeframe = 'M5 / M15',
+    this.scalpTimeframe = 'M1–D1 MTF',
     this.sessionName = '',
     this.atrPips = 0.0,
+    this.mtfAlignment = '',
+    this.mtfOverview = const [],
+    this.confluenceNote = '',
     required this.entryZone,
     required this.entryPrice,
     required this.stopLoss,
@@ -59,21 +107,33 @@ class TradeSetupModel {
     double tp3 = (json['take_profit_3'] as num?)?.toDouble() ?? 0.0;
     double r3Pips = (json['reward_tp3_pips'] as num?)?.toDouble() ?? 0.0;
 
-    // Graceful fallback if reading an older cached payload without TP3
     if (tp3 <= 0 && tp2 > 0 && entry > 0) {
       final step = (tp2 - tp1).abs();
       final delta = step > 0.5 ? step * 1.2 : 4.5;
-      tp3 = (tp2 >= entry) ? double.parse((tp2 + delta).toStringAsFixed(2)) : double.parse((tp2 - delta).toStringAsFixed(2));
+      tp3 = (tp2 >= entry)
+          ? double.parse((tp2 + delta).toStringAsFixed(2))
+          : double.parse((tp2 - delta).toStringAsFixed(2));
       r3Pips = double.parse(((tp3 - entry).abs() * 10.0).toStringAsFixed(1));
     }
+
+    final rawOverview = json['mtf_overview'];
+    final List<MtfTimeframeItem> overview = (rawOverview is List)
+        ? rawOverview
+            .whereType<Map>()
+            .map((e) => MtfTimeframeItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : const [];
 
     return TradeSetupModel(
       action: json['action'] ?? 'WAIT',
       actionLabel: json['action_label'] ?? 'WAIT / STANDBY',
       executionType: json['execution_type'] ?? 'INSTANT',
-      scalpTimeframe: json['scalp_timeframe'] ?? 'M5 / M15',
+      scalpTimeframe: json['scalp_timeframe'] ?? 'M1–D1 MTF',
       sessionName: json['session_name'] ?? '',
       atrPips: (json['atr_pips'] as num?)?.toDouble() ?? 0.0,
+      mtfAlignment: json['mtf_alignment']?.toString() ?? '',
+      mtfOverview: overview,
+      confluenceNote: json['confluence_note']?.toString() ?? '',
       entryZone: json['entry_zone'] ?? '',
       entryPrice: entry,
       stopLoss: (json['stop_loss'] as num?)?.toDouble() ?? 0.0,
@@ -101,6 +161,9 @@ class TradeSetupModel {
       'scalp_timeframe': scalpTimeframe,
       'session_name': sessionName,
       'atr_pips': atrPips,
+      'mtf_alignment': mtfAlignment,
+      'mtf_overview': mtfOverview.map((e) => e.toJson()).toList(),
+      'confluence_note': confluenceNote,
       'entry_zone': entryZone,
       'entry_price': entryPrice,
       'stop_loss': stopLoss,

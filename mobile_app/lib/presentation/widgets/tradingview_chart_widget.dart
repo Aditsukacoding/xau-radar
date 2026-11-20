@@ -21,7 +21,7 @@ class TradingViewChartWidget extends StatefulWidget {
 
 class _TradingViewChartWidgetState extends State<TradingViewChartWidget> {
   late String _currentTimeframe;
-  final List<String> _timeframes = ['1m', '5m', '15m', '1h', '4h', '1D'];
+  final List<String> _timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1D'];
 
   @override
   void initState() {

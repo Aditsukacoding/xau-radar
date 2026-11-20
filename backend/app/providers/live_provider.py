@@ -206,8 +206,10 @@ class LiveDataProvider(BaseDataProvider):
         # 1. Primary: Twelve Data Time Series
         if settings.TWELVE_DATA_API_KEY:
             td_interval_map = {
+                "1m": "1min",
                 "5m": "5min",
                 "15m": "15min",
+                "30m": "30min",
                 "1h": "1h",
                 "4h": "4h",
                 "1d": "1day",
@@ -254,25 +256,28 @@ class LiveDataProvider(BaseDataProvider):
             except Exception as e:
                 logger.warning(f"Twelve Data candle fetch failed: {e}")
 
-        # 2. Fast Authentic Yahoo Finance Feed (~350ms)
+        # 2. Fast Authentic Yahoo Finance Feed (~350ms) — full M1 through D1 support
+        # Note: Yahoo Finance has no native '4h' interval, so '4h' is resampled authentically from 60m bars.
         tf_map = {
+            "1m": ("1m", "1d"),
             "5m": ("5m", "5d"),
             "15m": ("15m", "5d"),
+            "30m": ("30m", "1mo"),
             "1h": ("60m", "1mo"),
-            "4h": ("4h", "3mo"),
-            "1d": ("1d", "1y"),
+            "4h": ("60m", "3mo"),
+            "1d": ("1d", "6mo"),
         }
         interval, range_param = tf_map.get(tf, ("60m", "1mo"))
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval={interval}&range={range_param}"
 
         try:
-            async with httpx.AsyncClient(headers=HEADERS, timeout=3.5) as client:
+            async with httpx.AsyncClient(headers=HEADERS, timeout=4.0) as client:
                 r = await client.get(url)
                 if r.status_code == 200:
                     data = r.json()
-                    res = data["chart"]["result"][0]
-                    timestamps = res.get("timestamp", [])
-                    quotes = res["indicators"]["quote"][0]
+                    res_chart = data["chart"]["result"][0]
+                    timestamps = res_chart.get("timestamp", [])
+                    quotes = res_chart["indicators"]["quote"][0]
 
                     opens = quotes.get("open", [])
                     highs = quotes.get("high", [])
@@ -301,11 +306,33 @@ class LiveDataProvider(BaseDataProvider):
                                 "volume": round(float(volumes[i] or 1500.0), 1),
                             })
 
+                    # Authentic 4H OHLCV resampling from 60m bars
+                    if tf == "4h" and len(candles) >= 8:
+                        buckets: Dict[datetime, List[Dict[str, Any]]] = {}
+                        for c in candles:
+                            ts = c["timestamp"]
+                            b_ts = ts.replace(hour=(ts.hour // 4) * 4, minute=0, second=0, microsecond=0)
+                            buckets.setdefault(b_ts, []).append(c)
+                        resampled: List[Dict[str, Any]] = []
+                        for b_ts in sorted(buckets.keys()):
+                            grp = buckets[b_ts]
+                            resampled.append({
+                                "symbol": sym_clean,
+                                "timeframe": "4h",
+                                "timestamp": b_ts,
+                                "open": grp[0]["open"],
+                                "high": max(x["high"] for x in grp),
+                                "low": min(x["low"] for x in grp),
+                                "close": grp[-1]["close"],
+                                "volume": round(sum(x["volume"] for x in grp), 1),
+                            })
+                        candles = resampled
+
                     if candles and len(candles) >= 15:
-                        res = candles[-count:]
-                        LiveDataProvider._candle_cache[cache_key] = res
+                        res_out = candles[-count:]
+                        LiveDataProvider._candle_cache[cache_key] = res_out
                         LiveDataProvider._candle_cache_time[cache_key] = now_ts
-                        return res
+                        return res_out
         except Exception as e:
             logger.warning(f"Yahoo Finance candle fetch failed: {e}")
 
@@ -925,7 +952,7 @@ class LiveDataProvider(BaseDataProvider):
         self, symbol: str, timeframe: str, count: int, base_price: float = 4178.0
     ) -> List[Dict[str, Any]]:
         now = datetime.now(timezone.utc)
-        step_minutes = {"5m": 5, "15m": 15, "1h": 60, "4h": 240, "1d": 1440}.get(timeframe.lower(), 60)
+        step_minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440}.get(timeframe.lower(), 60)
         candles = []
         curr = base_price - (count * 0.08)  # gently upward drifted to reach current spot
         for i in range(count):

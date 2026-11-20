@@ -12,9 +12,12 @@ class TradeSetup(BaseModel):
     action: str = "WAIT"  # BUY, SELL, WAIT
     action_label: str = "WAIT / STANDBY"  # e.g. BUY NOW (SCALP), SELL LIMIT (PULLBACK)
     execution_type: str = "INSTANT"  # INSTANT, LIMIT, WAIT
-    scalp_timeframe: str = "M5 / M15"
+    scalp_timeframe: str = "M1–D1 MTF"
     session_name: str = ""
     atr_pips: float = 0.0
+    mtf_alignment: str = ""  # e.g. "6/7 BEARISH • Selaras Kuat"
+    mtf_overview: List[Dict[str, Any]] = []  # All 7 TFs: M1, M5, M15, M30, H1, H4, D1
+    confluence_note: str = ""  # Cross-timeframe zone comparison summary
     entry_zone: str = ""  # e.g. $3562.50 - $3564.20
     entry_price: float = 0.0
     stop_loss: float = 0.0

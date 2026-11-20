@@ -25,11 +25,26 @@ class TradeSetupCard extends StatefulWidget {
 
 class _TradeSetupCardState extends State<TradeSetupCard> {
   late bool _isRationaleExpanded;
+  int _selectedTfIndex = 2; // Defaults to M15; user can tap M1, M5, M15, M30, H1, H4, D1 to compare zones
 
   @override
   void initState() {
     super.initState();
     _isRationaleExpanded = widget.initiallyExpanded;
+  }
+
+  Color _trendColor(String trend) {
+    final u = trend.toUpperCase();
+    if (u == 'BULLISH') return AppColors.bullish;
+    if (u == 'BEARISH') return AppColors.bearish;
+    return AppColors.gold;
+  }
+
+  IconData _trendIcon(String trend) {
+    final u = trend.toUpperCase();
+    if (u == 'BULLISH') return LucideIcons.trendingUp;
+    if (u == 'BEARISH') return LucideIcons.trendingDown;
+    return LucideIcons.minus;
   }
 
   @override
@@ -132,12 +147,12 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
           ),
           const SizedBox(height: 10),
 
-          // Meta Context Chips (Timeframe + Session + ATR)
+          // Meta Context Chips (M1–D1 MTF + Session + ATR)
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              _buildMetaPill(LucideIcons.clock, s.scalpTimeframe, AppColors.gold),
+              _buildMetaPill(LucideIcons.layers, s.scalpTimeframe, AppColors.gold),
               if (s.sessionName.isNotEmpty)
                 _buildMetaPill(LucideIcons.globe, s.sessionName, AppColors.textSecondary),
               if (s.atrPips > 0)
@@ -191,7 +206,16 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
               );
             },
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+
+          // ───────────────────────────────────────────────────────────────────
+          // 1.5 INTERACTIVE 7-TIMEFRAME PERSPECTIVE MATRIX (M1 .. D1)
+          // Tap any TF pill to compare its exact Support / Resistance / RSI!
+          // ───────────────────────────────────────────────────────────────────
+          if (s.mtfOverview.isNotEmpty) ...[
+            _buildMtfComparisonPanel(s),
+            const SizedBox(height: 14),
+          ],
 
           // 2. Top 2-Column Row: ZONA ENTRI & STOP LOSS
           Row(
@@ -420,6 +444,188 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                     Icon(LucideIcons.chevronRight, color: AppColors.gold, size: 12),
                   ],
                 ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMtfComparisonPanel(TradeSetupModel s) {
+    final items = s.mtfOverview;
+    final int safeIdx = _selectedTfIndex.clamp(0, items.length - 1);
+    final selectedItem = items[safeIdx];
+    final selectedColor = _trendColor(selectedItem.trend);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInset,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top label + alignment summary pill
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'SUDUT PANDANG 7 TIMEFRAME',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              if (s.mtfAlignment.isNotEmpty)
+                Flexible(
+                  child: Text(
+                    s.mtfAlignment,
+                    style: TextStyle(
+                      color: s.mtfAlignment.contains('BULLISH')
+                          ? AppColors.bullish
+                          : (s.mtfAlignment.contains('BEARISH') ? AppColors.bearish : AppColors.gold),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 9),
+
+          // 7-TF Interactive Pill Matrix (M1 | M5 | M15 | M30 | H1 | H4 | D1)
+          Row(
+            children: List.generate(items.length, (i) {
+              final tfItem = items[i];
+              final isSelected = i == safeIdx;
+              final tColor = _trendColor(tfItem.trend);
+
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: i == items.length - 1 ? 0 : 4),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      setState(() {
+                        _selectedTfIndex = i;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? tColor.withValues(alpha: 0.16)
+                            : const Color(0xFF141824),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected ? AppColors.gold.withValues(alpha: 0.75) : tColor.withValues(alpha: 0.22),
+                          width: isSelected ? 1.1 : 0.7,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            tfItem.tf,
+                            style: TextStyle(
+                              color: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+                              fontSize: 9.5,
+                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Icon(
+                            _trendIcon(tfItem.trend),
+                            color: tColor,
+                            size: 11.5,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 9),
+
+          // Selected TF Zone Inspector (Sup / Res / RSI for tapped TF!)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141824),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: AppColors.borderSubtle, width: 0.7),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${selectedItem.tf} ',
+                      style: const TextStyle(
+                        color: AppColors.gold,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      selectedItem.trend,
+                      style: TextStyle(
+                        color: selectedColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                if (selectedItem.rsi != null)
+                  Text(
+                    'RSI ${selectedItem.rsi!.toStringAsFixed(0)}',
+                    style: AppTypography.mono(
+                      color: AppColors.cyan,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                Text(
+                  'S: \$${selectedItem.sup.toStringAsFixed(1)}',
+                  style: AppTypography.mono(
+                    color: AppColors.bullish,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'R: \$${selectedItem.res.toStringAsFixed(1)}',
+                  style: AppTypography.mono(
+                    color: AppColors.bearish,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          if (s.confluenceNote.isNotEmpty) ...[
+            const SizedBox(height: 7),
+            Text(
+              s.confluenceNote,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 10.5,
+                height: 1.4,
               ),
             ),
           ],

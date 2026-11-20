@@ -27,15 +27,24 @@ class AnalysisService:
         db: Session,
         symbol: str,
         curr_price: float,
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
-        Fetches Multi-Timeframe candles (5m, 15m, 1h) from DB or live provider,
-        anchors the latest bar to real-time spot price, and calculates full scalping indicators.
+        Fetches full 7-Timeframe OHLCV candles concurrently (1m, 5m, 15m, 30m, 1h, 4h, 1d),
+        anchors the latest bar of every timeframe to live spot price, calculates full technical
+        indicators per timeframe, and synthesizes cross-timeframe confluence zones.
         """
         provider = get_data_provider()
-        mtf_results: Dict[str, Dict[str, Any]] = {}
+        tf_configs = [
+            ("1m", 60, 60),
+            ("5m", 60, 300),
+            ("15m", 60, 900),
+            ("30m", 60, 1800),
+            ("1h", 60, 1800),
+            ("4h", 60, 7200),
+            ("1d", 60, 14400),
+        ]
 
-        async def load_tf(tf: str, count: int) -> List[Dict[str, Any]]:
+        async def load_tf(tf: str, count: int, max_stale: int) -> List[Dict[str, Any]]:
             candles_db = (
                 db.query(PriceCandle)
                 .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
@@ -48,17 +57,13 @@ class AnalysisService:
                 latest_ts = candles_db[0].timestamp
                 if latest_ts.tzinfo is None:
                     latest_ts = latest_ts.replace(tzinfo=timezone.utc)
-                max_stale = 300 if tf == "5m" else (900 if tf == "15m" else 1800)
                 if (datetime.now(timezone.utc) - latest_ts).total_seconds() > max_stale:
                     need_live = True
 
             if need_live:
                 try:
                     raw = await provider.get_price_candles(symbol=symbol, timeframe=tf, count=count)
-                    if raw:
-                        candles_list = sorted(raw, key=lambda c: c["timestamp"])
-                    else:
-                        candles_list = []
+                    candles_list = sorted(raw, key=lambda c: c["timestamp"]) if raw else []
                 except Exception as e:
                     logger.warning(f"[AnalysisService] Live {tf} fetch failed, using DB cache: {e}")
                     candles_list = [
@@ -94,15 +99,15 @@ class AnalysisService:
 
             return candles_list
 
-        c5, c15, c1h = await asyncio.gather(
-            load_tf("5m", 60),
-            load_tf("15m", 60),
-            load_tf("1h", 60),
-        )
+        fetched = await asyncio.gather(*[load_tf(tf, cnt, stale) for tf, cnt, stale in tf_configs])
 
-        mtf_results["1h"] = TechnicalCalculator.calculate_indicators(c1h)
-        mtf_results["15m"] = TechnicalCalculator.calculate_indicators(c15 if len(c15) >= 15 else c1h)
-        mtf_results["5m"] = TechnicalCalculator.calculate_indicators(c5 if len(c5) >= 15 else (c15 if len(c15) >= 15 else c1h))
+        mtf_results: Dict[str, Any] = {}
+        fallback_candles = fetched[4] if len(fetched[4]) >= 15 else (fetched[2] if len(fetched[2]) >= 15 else fetched[1])
+        for (tf, _, _), c_list in zip(tf_configs, fetched):
+            use_list = c_list if len(c_list) >= 15 else fallback_candles
+            mtf_results[tf] = TechnicalCalculator.calculate_indicators(use_list)
+
+        mtf_results["confluence"] = TechnicalCalculator.analyze_mtf_confluence(mtf_results, curr_price)
         return mtf_results
 
     @classmethod
@@ -170,6 +175,7 @@ class AnalysisService:
             news_articles=news_data,
             m15_data=m15_tech,
             m5_data=m5_tech,
+            mtf_technical=mtf_tech,
         )
         sanitized = AIAgentEngine._sanitize_and_validate_trade_setup(
             raw_heuristic,
@@ -177,6 +183,7 @@ class AnalysisService:
             technical_data=h1_tech,
             m15_data=m15_tech,
             m5_data=m5_tech,
+            mtf_technical=mtf_tech,
             economic_events=events_data,
             news_articles=news_data,
         )
@@ -253,10 +260,10 @@ class AnalysisService:
             should_regenerate = False
             reason = ""
 
-            # Force upgrade legacy pre-TP3 setups immediately
-            if tp3 <= 0 or entry_p <= 0 or sl <= 0:
+            # Force upgrade legacy pre-TP3 or pre-7TF setups immediately
+            if tp3 <= 0 or entry_p <= 0 or sl <= 0 or not setup.get("mtf_overview"):
                 should_regenerate = True
-                reason = "Upgrade skema setup ke Direct Scalping TP1/TP2/TP3."
+                reason = "Upgrade skema setup ke 7-Timeframe MTF Direct Scalping (M1–D1 + TP1/TP2/TP3)."
 
             # --- 1. EVALUATE SELL SCALP SETUP ---
             elif action == "SELL":

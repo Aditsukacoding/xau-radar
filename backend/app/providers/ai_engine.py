@@ -7,37 +7,39 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """Kamu adalah Senior Institutional XAU/USD Direct Scalping & Quantitative Strategist.
-Tugas utamamu: menganalisis data multi-timeframe real-time (M5, M15, H1), ATR volatilitas, struktur swing, sesi pasar aktif, kalender ekonomi, dan sentimen berita untuk menghasilkan SETUP SCALPING SIAP EKSEKUSI (Entry, SL, TP1, TP2, TP3) yang presisi.
+SYSTEM_PROMPT = """Kamu adalah Senior Institutional XAU/USD Top-Down Multi-Timeframe (M1–D1) Scalping Strategist.
+Tugas utamamu: membandingkan SEMUA 7 sudut pandang timeframe (M1, M5, M15, M30, H1, H4, D1), mencari ZONA KONFLUENSI (zona Support/Resistance yang saling bertumpuk di beberapa timeframe sekaligus), ATR volatilitas, sesi aktif, kalender ekonomi, dan berita global untuk menghasilkan SETUP SCALPING SIAP EKSEKUSI (Entry, SL, TP1, TP2, TP3) yang presisi.
 
 ATURAN MUTLAK INTEGRITAS DATA & ZERO-HALLUCINATION:
 1. HARGA AKTIF PASAR: Seluruh angka harga (Entry, SL, TP1, TP2, TP3, Support, Resistance) WAJIB berpatokan langsung pada `current_price` di JSON input. JANGAN PERNAH memakai harga lama/halusinasi.
 2. HUKUM FISIKA TRADING (WAJIB 100% VALID):
    - BUY: `stop_loss < entry_low <= entry_price <= entry_high < take_profit_1 < take_profit_2 < take_profit_3`
    - SELL: `stop_loss > entry_high >= entry_price >= entry_low > take_profit_1 > take_profit_2 > take_profit_3`
-3. STRATEGI DIRECT SCALPING XAU/USD (BERBASIS ATR & STRUKTUR SWING M5/M15):
-   - Prioritaskan setup **DIRECT SCALPING** (`BUY` atau `SELL` dengan `execution_type: "INSTANT"` jika harga sudah di area eksekusi atau `"LIMIT"` jika pullback tipis 5–18 pips).
-   - JANGAN malas memberikan `WAIT` ketika harga berada di range intraday lebar! Dalam kondisi sideways/range, manfaatkan rejection Support/Resistance M15 atau momentum EMA M5 untuk scalping terarah.
+3. ANALISIS TOP-DOWN 7 TIMEFRAME (BANDINGKAN SEMUA SUDUT PANDANG!):
+   - **D1 & H4 (HTF — Arah Makro & Tembok Besar)**: Pastikan kamu tahu arah besar dan tidak sembarangan entry menabrak tembok Supply/Demand major H4/D1.
+   - **H1 & M30 (ITF — Struktur Intraday & Zona Utama)**: Petakan struktur swing dan zona pullback intraday.
+   - **M15 & M5 (Setup TF — Zona Entry & ATR)**: Kalibrasi lebar zona entry & Stop Loss menggunakan `atr_14` M15 dan swing structure.
+   - **M1 (LTF — Sniper Trigger)**: Cek apakah M1 sudah konfirmasi reaksi untuk `execution_type: "INSTANT"` (eksekusi langsung) atau masih terlalu jauh sehingga lebih baik `"LIMIT"` menunggu pullback tipis ke zona konfluensi!
+   - **ZONA KONFLUENSI LINTAS TIMEFRAME**: Perhatikan `confluence_demand_zones` dan `confluence_supply_zones` di input JSON — zona yang disepakati 2–4 timeframe sekaligus adalah zona entry & TP terbaik!
    - Hanya gunakan `WAIT` jika ada rilis berita HIGH-IMPACT USD (NFP/CPI/FOMC/PCE) kurang dari 15 menit lagi.
-   - **ZONA ENTRY KETAT**: Lebar maksimal 10–20 pips ($1.00–$2.00) di dekat `current_price` agar langsung bisa dieksekusi scalper.
+   - **ZONA ENTRY KETAT**: Lebar maksimal 10–20 pips ($1.00–$2.00) di dekat `current_price` atau zona konfluensi terdekat.
    - **STOP LOSS (SL) DINAMIS BERBASIS ATR & SWING**:
-     * Letakkan di balik swing low/high M5–M15 terdekat + buffer tipis, disesuaikan dengan `atr_14` M15 saat ini (kisaran ideal 25–65 pips / $2.50–$6.50 tergantung sesi Asia vs London/NY Killzone).
-     * Jangan terlalu sempit (< 20 pips rentan sweep) dan jangan terlalu lebar (> 75 pips untuk scalping).
+     * Di balik swing low/high M5–M15/M30 terdekat (kisaran ideal 25–65 pips / $2.50–$6.50 disesuaikan ATR sesi).
    - **3-TIER TAKE PROFIT SCALING (WAJIB LENGKAP TP1, TP2, TP3)**:
-     * **TP1 (Quick Scalp — Amankan 40% Lot)**: Target cepat ~0.9x–1.2x jarak SL (25–50 pips) di likuiditas minor terdekat → langsung geser SL ke Breakeven (BEP).
-     * **TP2 (Main Intraday Target — Amankan 40% Lot)**: Target struktur utama ~1.8x–2.3x jarak SL (55–100 pips) di area S/R M15/H1 → geser SL ke TP1 (Profit Locked).
-     * **TP3 (Extended Runner — Tahan 20% Lot)**: Target ekspansi impuls ~2.8x–3.8x jarak SL (95–170 pips) di zona likuiditas major H1 untuk memaksimalkan trend continuation.
+     * **TP1 (Quick Scalp — Amankan 40% Lot)**: ~0.9x–1.2x jarak SL → langsung geser SL ke Breakeven (BEP).
+     * **TP2 (Main Intraday Target — Amankan 40% Lot)**: ~1.8x–2.3x jarak SL di area konfluensi M15/M30/H1 → geser SL ke TP1.
+     * **TP3 (Extended Runner — Tahan 20% Lot)**: ~2.8x–3.8x jarak SL di area likuiditas H1/H4.
 4. BAHASA & RINGKASAN:
-   - Gunakan Bahasa Indonesia profesional, lugas, taktis, langsung ke poin eksekusi (maksimal 2–3 kalimat padat per bagian).
+   - Bahasa Indonesia profesional, tajam, taktis, langsung menjelaskan perbandingan timeframe (HTF vs ITF vs LTF).
 
 OUTPUT HARUS BERUPA JSON VALID MURNI TANPA MARKDOWN WRAPPER:
 {
   "bias": "BULLISH" | "BEARISH" | "NEUTRAL",
   "confidence_score": integer (55-95),
-  "summary": "Ringkasan bias 2 kalimat yang menyatukan struktur M5/M15/H1, sesi aktif, dan sentimen makro/geopolitik.",
+  "summary": "Ringkasan bias 2 kalimat yang membandingkan arah HTF (D1/H4/H1) vs LTF (M30/M15/M5/M1), sesi aktif, dan makro.",
   "fundamental_notes": "Dampak agenda kalender ekonomi terdekat, suku bunga Fed, Yield US10Y & DXY.",
   "geopolitical_notes": "Dampak sentimen berita global & safe-haven terkini ke permintaan emas.",
-  "technical_notes": "Analisis sinkronisasi H1 (bias) + M15 (struktur & ATR) + M5 (trigger entry & price action).",
+  "technical_notes": "Perbandingan sudut pandang D1/H4 (makro) vs H1/M30 (struktur) vs M15/M5/M1 (zona entry & konfluensi).",
   "key_levels": {
     "support": [number, number],
     "resistance": [number, number]
@@ -46,7 +48,7 @@ OUTPUT HARUS BERUPA JSON VALID MURNI TANPA MARKDOWN WRAPPER:
     "action": "BUY" | "SELL" | "WAIT",
     "action_label": "BUY NOW (SCALP)" | "BUY LIMIT (PULLBACK)" | "SELL NOW (SCALP)" | "SELL LIMIT (RALLY)" | "WAIT / NEWS GUARD",
     "execution_type": "INSTANT" | "LIMIT" | "WAIT",
-    "scalp_timeframe": "M5 / M15",
+    "scalp_timeframe": "M1–D1 MTF",
     "entry_zone": "$3562.50 - $3564.20",
     "entry_price": 3563.50,
     "stop_loss": 3559.70,
@@ -54,15 +56,16 @@ OUTPUT HARUS BERUPA JSON VALID MURNI TANPA MARKDOWN WRAPPER:
     "take_profit_2": 3571.50,
     "take_profit_3": 3576.50,
     "lot_management": "40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3",
-    "technical_rationale": "Alasan spesifik berbasis struktur M5/M15, EMA/RSI, ATR, dan rencana scaling TP1-TP2-TP3.",
-    "invalidation_level": "Close candle M15 di bawah $3559.70 membatalkan setup buy scalp ini."
+    "confluence_note": "Penjelasan 1 kalimat timeframe mana saja yang sepakat di zona entry & perbandingan HTF vs LTF.",
+    "technical_rationale": "Alasan spesifik berbasis perbandingan 7 timeframe (M1–D1), zona konfluensi, ATR, dan scaling TP1-TP2-TP3.",
+    "invalidation_level": "Close candle M15 di bawah $3559.70 membatalkan setup ini."
   },
   "risk_factors": [
     "Faktor risiko 1",
     "Faktor risiko 2"
   ],
   "sources": [
-    "Multi-Timeframe Price Action (M5, M15, H1) & ATR(14)",
+    "Analisis Top-Down 7 Timeframe (M1, M5, M15, M30, H1, H4, D1) & ATR(14)",
     "Kalender Ekonomi ForexFactory",
     "Arus Berita Global & Geopolitik XAU/USD"
   ]
@@ -89,47 +92,36 @@ class AIAgentEngine:
         Always followed by a smart non-destructive physics & pip sanitizer.
         """
         curr_price = float(price_snapshot.get("current_price", 0.0) or technical_data.get("latest_price", 3560.0))
-        m15_tech = (mtf_technical or {}).get("15m") or technical_data
-        m5_tech = (mtf_technical or {}).get("5m") or m15_tech
-        h1_tech = (mtf_technical or {}).get("1h") or technical_data
+        mtf = mtf_technical or {}
+        m1_tech = mtf.get("1m") or mtf.get("5m") or technical_data
+        m5_tech = mtf.get("5m") or technical_data
+        m15_tech = mtf.get("15m") or technical_data
+        m30_tech = mtf.get("30m") or m15_tech
+        h1_tech = mtf.get("1h") or technical_data
+        h4_tech = mtf.get("4h") or h1_tech
+        d1_tech = mtf.get("1d") or h4_tech
+        confluence = mtf.get("confluence") or {}
 
         payload_data = {
             "symbol": symbol,
             "current_price": curr_price,
             "session": m15_tech.get("session_name", "Global Session"),
             "session_volatility": m15_tech.get("session_volatility", "MEDIUM"),
-            "mtf_technical": {
-                "m5_execution": {
-                    "trend": m5_tech.get("trend_direction"),
-                    "rsi_14": m5_tech.get("rsi_14"),
-                    "ema_9": m5_tech.get("ema_9"),
-                    "ema_21": m5_tech.get("ema_21"),
-                    "atr_14": m5_tech.get("atr_14"),
-                    "price_action": m5_tech.get("price_action"),
-                    "price_action_note": m5_tech.get("price_action_note"),
-                },
-                "m15_scalp_structure": {
-                    "trend": m15_tech.get("trend_direction"),
-                    "rsi_14": m15_tech.get("rsi_14"),
-                    "ema_9": m15_tech.get("ema_9"),
-                    "ema_21": m15_tech.get("ema_21"),
-                    "atr_14": m15_tech.get("atr_14"),
-                    "atr_pips": m15_tech.get("atr_pips"),
-                    "swing_lows": m15_tech.get("swing_lows", []),
-                    "swing_highs": m15_tech.get("swing_highs", []),
-                    "supports": m15_tech.get("support_levels", []),
-                    "resistances": m15_tech.get("resistance_levels", []),
-                    "price_action": m15_tech.get("price_action"),
-                },
-                "h1_macro_bias": {
-                    "trend": h1_tech.get("trend_direction"),
-                    "rsi_14": h1_tech.get("rsi_14"),
-                    "sma_20": h1_tech.get("sma_20"),
-                    "sma_50": h1_tech.get("sma_50"),
-                    "atr_14": h1_tech.get("atr_14"),
-                    "supports": h1_tech.get("support_levels", []),
-                    "resistances": h1_tech.get("resistance_levels", []),
-                },
+            "top_down_alignment": {
+                "alignment_label": confluence.get("alignment_label", ""),
+                "htf_bias_d1_h4_h1": confluence.get("htf_bias", h1_tech.get("trend_direction")),
+                "itf_bias_m30_m15": confluence.get("itf_bias", m15_tech.get("trend_direction")),
+                "ltf_bias_m5_m1": confluence.get("ltf_bias", m5_tech.get("trend_direction")),
+                "mtf_score": confluence.get("mtf_score", 0.0),
+            },
+            "all_7_timeframes_comparison": confluence.get("overview", []),
+            "confluence_demand_zones": confluence.get("confluence_supports", []),
+            "confluence_supply_zones": confluence.get("confluence_resistances", []),
+            "execution_detail": {
+                "m1_trigger": {"trend": m1_tech.get("trend_direction"), "rsi": m1_tech.get("rsi_14"), "ema9": m1_tech.get("ema_9"), "pa": m1_tech.get("price_action")},
+                "m5_structure": {"trend": m5_tech.get("trend_direction"), "rsi": m5_tech.get("rsi_14"), "ema9": m5_tech.get("ema_9"), "ema21": m5_tech.get("ema_21"), "pa": m5_tech.get("price_action_note")},
+                "m15_atr_swings": {"atr_14": m15_tech.get("atr_14"), "atr_pips": m15_tech.get("atr_pips"), "swing_lows": m15_tech.get("swing_lows", []), "swing_highs": m15_tech.get("swing_highs", [])},
+                "m30_h1_intraday": {"m30_trend": m30_tech.get("trend_direction"), "h1_trend": h1_tech.get("trend_direction"), "h4_trend": h4_tech.get("trend_direction"), "d1_trend": d1_tech.get("trend_direction")},
             },
             "upcoming_economic_events": economic_events[:4],
             "recent_news_sentiment": news_articles[:4],
@@ -145,10 +137,11 @@ class AIAgentEngine:
                     technical_data=h1_tech,
                     m15_data=m15_tech,
                     m5_data=m5_tech,
+                    mtf_technical=mtf,
                     economic_events=economic_events,
                     news_articles=news_articles,
                 )
-                logger.info("[AIAgentEngine] Claude scalping analysis synthesized & validated!")
+                logger.info("[AIAgentEngine] Claude 7-TF MTF scalping analysis synthesized & validated!")
                 return sanitized
             except Exception as e:
                 logger.warning(f"Claude API failed, falling back: {e}")
@@ -163,10 +156,11 @@ class AIAgentEngine:
                     technical_data=h1_tech,
                     m15_data=m15_tech,
                     m5_data=m5_tech,
+                    mtf_technical=mtf,
                     economic_events=economic_events,
                     news_articles=news_articles,
                 )
-                logger.info("[AIAgentEngine] Gemini scalping analysis synthesized & validated!")
+                logger.info("[AIAgentEngine] Gemini 7-TF scalping analysis synthesized & validated!")
                 return sanitized
             except Exception as e:
                 logger.warning(f"Gemini API failed, trying OpenRouter fallback: {e}")
@@ -181,15 +175,16 @@ class AIAgentEngine:
                     technical_data=h1_tech,
                     m15_data=m15_tech,
                     m5_data=m5_tech,
+                    mtf_technical=mtf,
                     economic_events=economic_events,
                     news_articles=news_articles,
                 )
-                logger.info("[AIAgentEngine] OpenRouter scalping analysis synthesized & validated!")
+                logger.info("[AIAgentEngine] OpenRouter 7-TF scalping analysis synthesized & validated!")
                 return sanitized
             except Exception as e:
-                logger.warning(f"OpenRouter API failed, falling back to quantitative scalping engine: {e}")
+                logger.warning(f"OpenRouter API failed, falling back to quantitative 7-TF scalping engine: {e}")
 
-        # 4. Built-in Multi-Timeframe ATR Quantitative Direct Scalping Engine (Zero-cost, sub-10ms)
+        # 4. Built-in 7-Timeframe ATR & Confluence Quantitative Direct Scalping Engine
         raw_heuristic = AIAgentEngine._heuristic_synthesis(
             symbol=symbol,
             price_snapshot=price_snapshot,
@@ -198,6 +193,7 @@ class AIAgentEngine:
             news_articles=news_articles,
             m15_data=m15_tech,
             m5_data=m5_tech,
+            mtf_technical=mtf,
         )
         return AIAgentEngine._sanitize_and_validate_trade_setup(
             raw_heuristic,
@@ -205,6 +201,7 @@ class AIAgentEngine:
             technical_data=h1_tech,
             m15_data=m15_tech,
             m5_data=m5_tech,
+            mtf_technical=mtf,
             economic_events=economic_events,
             news_articles=news_articles,
         )
@@ -402,53 +399,69 @@ class AIAgentEngine:
         news_articles: List[Dict[str, Any]],
         m15_data: Optional[Dict[str, Any]] = None,
         m5_data: Optional[Dict[str, Any]] = None,
+        mtf_technical: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Quantitative Multi-Timeframe (H1 + M15 + M5) ATR-Calibrated Direct Scalping Synthesizer.
-        Combines Macro Fundamental (25%), Geopolitics (20%), H1 Structure (25%), and M15/M5 Execution Momentum (30%).
+        Quantitative 7-Timeframe Top-Down (M1, M5, M15, M30, H1, H4, D1) Confluence Scalping Synthesizer.
+        Weights HTF macro structure (D1/H4/H1), ITF intraday swings (M30/M15), and LTF sniper triggers (M5/M1).
         """
         curr_price = float(price_snapshot.get("current_price", 0.0) or technical_data.get("latest_price", 3560.0))
-        m15 = m15_data or technical_data
-        m5 = m5_data or m15
+        mtf = mtf_technical or {}
+        m1 = mtf.get("1m") or m5_data or technical_data
+        m15 = m15_data or mtf.get("15m") or technical_data
+        m5 = m5_data or mtf.get("5m") or m15
+        m30 = mtf.get("30m") or m15
+        h4 = mtf.get("4h") or technical_data
+        d1 = mtf.get("1d") or h4
+        confluence = mtf.get("confluence") or {}
 
-        # 1. Multi-Timeframe Technical Score (-1.0 to +1.0)
+        # 1. 7-Timeframe Weighted Technical Score (-1.0 to +1.0)
         def dir_to_score(d: str) -> float:
             u = str(d or "").upper()
             return 0.85 if u == "BULLISH" else (-0.85 if u == "BEARISH" else 0.0)
 
-        h1_score = dir_to_score(technical_data.get("trend_direction", "SIDEWAYS"))
-        m15_score = dir_to_score(m15.get("trend_direction", "SIDEWAYS"))
-        m5_score = dir_to_score(m5.get("trend_direction", "SIDEWAYS"))
+        if "mtf_score" in confluence:
+            base_mtf = float(confluence["mtf_score"])
+        else:
+            base_mtf = (
+                dir_to_score(d1.get("trend_direction", "SIDEWAYS")) * 0.20
+                + dir_to_score(h4.get("trend_direction", "SIDEWAYS")) * 0.18
+                + dir_to_score(technical_data.get("trend_direction", "SIDEWAYS")) * 0.17
+                + dir_to_score(m30.get("trend_direction", "SIDEWAYS")) * 0.15
+                + dir_to_score(m15.get("trend_direction", "SIDEWAYS")) * 0.13
+                + dir_to_score(m5.get("trend_direction", "SIDEWAYS")) * 0.10
+                + dir_to_score(m1.get("trend_direction", "SIDEWAYS")) * 0.07
+            )
 
-        # Add Price Action micro-trigger nudge on M5/M15
-        pa = str(m5.get("price_action") or m15.get("price_action") or "").upper()
+        # Add Price Action micro-trigger nudge on M1/M5/M15
+        pa = str(m1.get("price_action") or m5.get("price_action") or m15.get("price_action") or "").upper()
         pa_boost = 0.0
         if pa in ("BULLISH_REJECTION", "BULLISH_ENGULFING", "BULLISH_IMPULSE"):
-            pa_boost = 0.30
+            pa_boost = 0.25
         elif pa in ("BEARISH_REJECTION", "BEARISH_ENGULFING", "BEARISH_IMPULSE"):
-            pa_boost = -0.30
+            pa_boost = -0.25
 
-        # Add RSI oversold/overbought scalping mean-reversion edge
+        # Add RSI oversold/overbought scalping edge
         m15_rsi = m15.get("rsi_14")
         rsi_edge = 0.0
         if isinstance(m15_rsi, (int, float)):
             if m15_rsi <= 34:
-                rsi_edge = 0.35
+                rsi_edge = 0.28
             elif m15_rsi >= 66:
-                rsi_edge = -0.35
+                rsi_edge = -0.28
             elif 52 <= m15_rsi < 66:
-                rsi_edge = 0.15
+                rsi_edge = 0.12
             elif 34 < m15_rsi <= 48:
-                rsi_edge = -0.15
+                rsi_edge = -0.12
 
-        tech_score = max(-1.0, min(1.0, (h1_score * 0.40) + (m15_score * 0.35) + (m5_score * 0.25) + pa_boost + rsi_edge))
+        tech_score = max(-1.0, min(1.0, base_mtf + pa_boost + rsi_edge))
 
         # 2. Geopolitical Sentiment Score (-1.0 to 1.0)
         news_scores = [float(n.get("sentiment_score", 0.0) or 0.0) for n in news_articles]
         geo_score = sum(news_scores) / len(news_scores) if news_scores else 0.0
 
         # 3. Fundamental Score (-1.0 to 1.0)
-        fund_score = 0.15
+        fund_score = 0.10
         for event in economic_events:
             impact = str(event.get("sentiment_impact", "") or "").upper()
             if "BULLISH_GOLD" in impact or "BEARISH_USD" in impact:
@@ -458,46 +471,47 @@ class AIAgentEngine:
         fund_score = max(-1.0, min(1.0, fund_score))
 
         # Weighted Composite Score
-        composite_score = (tech_score * 0.55) + (fund_score * 0.25) + (geo_score * 0.20)
+        composite_score = (tech_score * 0.60) + (fund_score * 0.22) + (geo_score * 0.18)
 
-        # Range Edge Proximity Bonus (for direct scalping even in sideways markets)
-        supports = m15.get("support_levels") or technical_data.get("support_levels") or [round(curr_price - 8.0, 2)]
-        resistances = m15.get("resistance_levels") or technical_data.get("resistance_levels") or [round(curr_price + 8.0, 2)]
+        # Confluence Support & Resistance from all 7 TFs
+        conf_sups = confluence.get("confluence_supports") or []
+        conf_ress = confluence.get("confluence_resistances") or []
+        supports = [c["price"] for c in conf_sups] or m15.get("support_levels") or technical_data.get("support_levels") or [round(curr_price - 8.0, 2)]
+        resistances = [c["price"] for c in conf_ress] or m15.get("resistance_levels") or technical_data.get("resistance_levels") or [round(curr_price + 8.0, 2)]
         nearest_sup = max([s for s in supports if s < curr_price], default=round(curr_price - 8.0, 2))
         nearest_res = min([r for r in resistances if r > curr_price], default=round(curr_price + 8.0, 2))
         dist_sup = curr_price - nearest_sup
         dist_res = nearest_res - curr_price
 
-        # If price is tightly hugging Support or Resistance, tilt scalping direction cleanly
         if abs(composite_score) < 0.18:
             if dist_sup < dist_res * 0.65 and dist_sup <= 8.0:
-                composite_score += 0.24  # Bounce scalp off Support
+                composite_score += 0.22
             elif dist_res < dist_sup * 0.65 and dist_res <= 8.0:
-                composite_score -= 0.24  # Rejection scalp off Resistance
+                composite_score -= 0.22
 
         session_name = m15.get("session_name", "Global Session")
+        align_label = confluence.get("alignment_label", "MTF 7-TF")
 
         if composite_score >= 0.12:
             bias = "BULLISH"
             confidence = int(64 + min(30, abs(composite_score) * 32))
             summary = (
-                f"Struktur {symbol} pada {session_name} mengonfirmasi peluang BUY Scalp "
-                f"dengan dukungan momentum M5/M15 dan reaksi demand di atas Support ${nearest_sup:.2f}."
+                f"Perbandingan 7 timeframe ({align_label}) pada {session_name} mengonfirmasi bias BUY {symbol} "
+                f"dengan zona konfluensi demand di sekitar ${nearest_sup:.2f}."
             )
         elif composite_score <= -0.12:
             bias = "BEARISH"
             confidence = int(64 + min(30, abs(composite_score) * 32))
             summary = (
-                f"Struktur {symbol} pada {session_name} mengonfirmasi peluang SELL Scalp "
-                f"akibat tekanan supply di bawah Resistance ${nearest_res:.2f} dan momentum bearish M5/M15."
+                f"Perbandingan 7 timeframe ({align_label}) pada {session_name} mengonfirmasi bias SELL {symbol} "
+                f"dengan zona konfluensi supply di sekitar ${nearest_res:.2f}."
             )
         else:
-            # Break tie cleanly using M5 momentum or range proximity so scalpers get an actionable bias
             bias = "BULLISH" if (dist_sup <= dist_res) else "BEARISH"
             confidence = 60
             summary = (
-                f"Pasar {symbol} berkonsolidasi dalam range ${nearest_sup:.2f}–${nearest_res:.2f} ({session_name}); "
-                f"setup scalping taktis diarahkan mengikuti sisi {bias} terdekat dengan kontrol risiko ketat."
+                f"Sudut pandang lintas timeframe ({align_label}) menunjukkan konsolidasi ${nearest_sup:.2f}–${nearest_res:.2f}; "
+                f"setup scalping taktis diarahkan ke sisi {bias} dengan SL struktural ketat."
             )
 
         confidence = max(55, min(94, confidence))
@@ -511,13 +525,14 @@ class AIAgentEngine:
             technical_data=technical_data,
             m15_data=m15,
             m5_data=m5,
+            mtf_technical=mtf,
             economic_events=economic_events,
             news_articles=news_articles,
         )
 
         sources = [
-            f"Multi-Timeframe Price Action M5/M15/H1 & ATR(14) {m15.get('atr_pips', 35.0)} pips",
-            f"Sesi Pasar Aktif: {session_name}",
+            f"Perbandingan Top-Down 7 Timeframe (M1–D1: {align_label})",
+            f"Sesi {session_name} • ATR M15 {m15.get('atr_pips', 35.0)} pips",
         ]
         if economic_events:
             sources.append(f"Kalender Ekonomi: {economic_events[0].get('event_title', 'Agenda Makro')}")
@@ -541,9 +556,10 @@ class AIAgentEngine:
                 "Dinamika geopolitik global dan aliran aset safe-haven tetap menjadi penopang volatilitas intraday emas."
             ),
             "technical_notes": (
-                f"H1: {technical_data.get('trend_direction', 'SIDEWAYS')} | "
-                f"M15: {m15.get('trend_direction', 'SIDEWAYS')} (ATR {m15.get('atr_pips', 35.0)} pips, RSI {m15.get('rsi_14', '-')}) | "
-                f"M5: {m5.get('price_action_note', m5.get('trend_direction', 'ACTIVE'))}."
+                f"HTF (D1 {d1.get('trend_direction', '-')}, H4 {h4.get('trend_direction', '-')}, H1 {technical_data.get('trend_direction', '-')}) | "
+                f"ITF (M30 {m30.get('trend_direction', '-')}, M15 {m15.get('trend_direction', '-')}) | "
+                f"LTF (M5 {m5.get('trend_direction', '-')}, M1 {m1.get('trend_direction', '-')}). "
+                f"{confluence.get('confluence_note', '')}"
             ),
             "key_levels": {
                 "support": supports[:2],
@@ -564,15 +580,25 @@ class AIAgentEngine:
         technical_data: Dict[str, Any],
         m15_data: Optional[Dict[str, Any]] = None,
         m5_data: Optional[Dict[str, Any]] = None,
+        mtf_technical: Optional[Dict[str, Any]] = None,
         economic_events: Optional[List[Dict[str, Any]]] = None,
         news_articles: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
-        ATR-Calibrated Institutional Direct Scalping Engine (SL + TP1 + TP2 + TP3).
-        Automatically scales SL and 3-tier TP targets to M15 ATR(14) and nearest fractal swing structure.
+        7-Timeframe Confluence & ATR-Calibrated Direct Scalping Engine (SL + TP1 + TP2 + TP3).
+        Reconciles M1/M5/M15/M30/H1/H4/D1 zones so entry sits at the strongest overlapping cluster.
         """
-        m15 = m15_data or technical_data
-        m5 = m5_data or m15
+        mtf = mtf_technical or {}
+        m1 = mtf.get("1m") or m5_data or technical_data
+        m15 = m15_data or mtf.get("15m") or technical_data
+        m5 = m5_data or mtf.get("5m") or m15
+        confluence = mtf.get("confluence") or {}
+        conf_sups = confluence.get("confluence_supports") or []
+        conf_ress = confluence.get("confluence_resistances") or []
+        align_label = str(confluence.get("alignment_label") or "MTF 7-TF")
+        conf_note = str(confluence.get("confluence_note") or "")
+        mtf_overview = confluence.get("overview") or []
+
         atr_m15 = float(m15.get("atr_14") or technical_data.get("atr_14") or 3.50)
         session_name = str(m15.get("session_name") or "Global Session")
         session_vol = str(m15.get("session_volatility") or "MEDIUM")
@@ -629,20 +655,24 @@ class AIAgentEngine:
 
         if bias == "BULLISH":
             action = "BUY"
-            # Direct Instant Scalp if all 3 timeframes align, or price is near EMA 9 / Support / bullish PA
-            all_3tf_bull = (
-                str(technical_data.get("trend_direction", "")).upper() == "BULLISH"
-                and str(m15.get("trend_direction", "")).upper() == "BULLISH"
-                and str(m5.get("trend_direction", "")).upper() == "BULLISH"
-            )
+            # Direct Instant Scalp if HTF/ITF/LTF align (including M1 trigger), else tight pullback to confluence cluster
+            m1_bull = str(m1.get("trend_direction", "")).upper() == "BULLISH"
+            all_ltf_bull = m1_bull and str(m5.get("trend_direction", "")).upper() == "BULLISH"
             near_ema = ema9_m5 is not None and abs(curr_price - float(ema9_m5)) <= (atr_m15 * 0.65)
             near_sup = bool(swing_lows) and (curr_price - swing_lows[0]) <= (atr_m15 * 1.1)
-            is_instant = all_3tf_bull or near_ema or near_sup or str(m5.get("price_action", "")).startswith("BULLISH")
+            is_instant = all_ltf_bull or near_ema or near_sup or str(m1.get("price_action", "")).startswith("BULLISH")
 
-            if is_instant:
+            # Check if a strong multi-TF Confluence Support cluster sits right below price (within $2.20)
+            best_conf_sup = next((c for c in conf_sups if c["tf_count"] >= 2 and 0.30 <= (curr_price - c["price"]) <= 2.20), None)
+
+            if is_instant and not best_conf_sup:
                 execution_type = "INSTANT"
                 action_label = "BUY NOW (SCALP)"
                 entry_price = round(curr_price, 2)
+            elif best_conf_sup:
+                execution_type = "LIMIT"
+                action_label = "BUY LIMIT (CONFLUENCE)"
+                entry_price = round(float(best_conf_sup["price"]), 2)
             else:
                 execution_type = "LIMIT"
                 action_label = "BUY LIMIT (PULLBACK)"
@@ -692,19 +722,22 @@ class AIAgentEngine:
 
         else:
             action = "SELL"
-            all_3tf_bear = (
-                str(technical_data.get("trend_direction", "")).upper() == "BEARISH"
-                and str(m15.get("trend_direction", "")).upper() == "BEARISH"
-                and str(m5.get("trend_direction", "")).upper() == "BEARISH"
-            )
+            m1_bear = str(m1.get("trend_direction", "")).upper() == "BEARISH"
+            all_ltf_bear = m1_bear and str(m5.get("trend_direction", "")).upper() == "BEARISH"
             near_ema = ema9_m5 is not None and abs(curr_price - float(ema9_m5)) <= (atr_m15 * 0.65)
             near_res = bool(swing_highs) and (swing_highs[0] - curr_price) <= (atr_m15 * 1.1)
-            is_instant = all_3tf_bear or near_ema or near_res or str(m5.get("price_action", "")).startswith("BEARISH")
+            is_instant = all_ltf_bear or near_ema or near_res or str(m1.get("price_action", "")).startswith("BEARISH")
 
-            if is_instant:
+            best_conf_res = next((c for c in conf_ress if c["tf_count"] >= 2 and 0.30 <= (c["price"] - curr_price) <= 2.20), None)
+
+            if is_instant and not best_conf_res:
                 execution_type = "INSTANT"
                 action_label = "SELL NOW (SCALP)"
                 entry_price = round(curr_price, 2)
+            elif best_conf_res:
+                execution_type = "LIMIT"
+                action_label = "SELL LIMIT (CONFLUENCE)"
+                entry_price = round(float(best_conf_res["price"]), 2)
             else:
                 execution_type = "LIMIT"
                 action_label = "SELL LIMIT (RALLY)"
@@ -754,9 +787,12 @@ class AIAgentEngine:
             "action": action,
             "action_label": action_label,
             "execution_type": execution_type,
-            "scalp_timeframe": "M5 / M15",
+            "scalp_timeframe": "M1–D1 MTF",
             "session_name": session_name,
             "atr_pips": round(atr_m15 * 10.0, 1),
+            "mtf_alignment": align_label,
+            "mtf_overview": mtf_overview,
+            "confluence_note": conf_note,
             "entry_zone": entry_zone,
             "entry_price": entry_price,
             "stop_loss": stop_loss,
@@ -782,6 +818,7 @@ class AIAgentEngine:
         technical_data: Optional[Dict[str, Any]] = None,
         m15_data: Optional[Dict[str, Any]] = None,
         m5_data: Optional[Dict[str, Any]] = None,
+        mtf_technical: Optional[Dict[str, Any]] = None,
         economic_events: Optional[List[Dict[str, Any]]] = None,
         news_articles: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
@@ -893,7 +930,11 @@ class AIAgentEngine:
         ai_rationale = str(raw_setup.get("technical_rationale", "")).strip()
         ai_invalidation = str(raw_setup.get("invalidation_level", "")).strip()
         lot_mgmt = str(raw_setup.get("lot_management", "")).strip() or "40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3"
-        scalp_tf = str(raw_setup.get("scalp_timeframe", "")).strip() or "M5 / M15"
+        scalp_tf = str(raw_setup.get("scalp_timeframe", "")).strip() or "M1–D1 MTF"
+        confluence = (mtf_technical or {}).get("confluence") or {}
+        mtf_overview = confluence.get("overview") or raw_setup.get("mtf_overview") or []
+        mtf_alignment = str(confluence.get("alignment_label") or raw_setup.get("mtf_alignment") or "M1–D1 MTF")
+        confluence_note = str(raw_setup.get("confluence_note") or confluence.get("confluence_note") or "").strip()
 
         if action == "BUY":
             entry_price = entry_p
@@ -1010,6 +1051,9 @@ class AIAgentEngine:
             "scalp_timeframe": scalp_tf,
             "session_name": session_name,
             "atr_pips": round(atr_m15 * 10.0, 1),
+            "mtf_alignment": mtf_alignment,
+            "mtf_overview": mtf_overview,
+            "confluence_note": confluence_note,
             "entry_zone": entry_zone,
             "entry_price": entry_price,
             "stop_loss": sl,
