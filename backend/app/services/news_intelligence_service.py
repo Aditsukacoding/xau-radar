@@ -33,7 +33,7 @@ ATURAN MUTLAK INTEGRITAS DATA & ZERO-HALLUCINATION:
    - Skenario C (Dovish Surprise / Inflasi Melandai / NFP Lemah): Yield US10Y & DXY anjlok -> Emas memantul (rally) menuju target Resistance (di atas harga sekarang).
 4. BAHASA & STRUKTUR:
    - Jawab dalam Bahasa Indonesia yang santai tapi rapi, profesional, berbasis data makro & intermarket, tidak bertele-tele, dan selalu sertakan level numerik konkret.
-   - Tulis jam dalam format WIB (sebutkan UTC-nya) dan sertakan tanggal lengkap.
+   - Tulis jam dalam format waktu Indonesia WIB (UTC+7) menggunakan hari dan bulan Bahasa Indonesia.
    - Jangan beri perintah beli/jual dan jangan tentukan ukuran lot/posisi. Keputusan tetap di tangan trader.
 5. RINGKAS, PADAT & TERARAH:
    - Tulis setiap field teks secara padat dan tajam (cukup 1-2 kalimat per field ringkasan).
@@ -371,13 +371,17 @@ class NewsIntelligenceService:
                 dynamic_plan["bias"] = "BEARISH"
                 dynamic_plan["confidence_level"] = "Tinggi" if "STRONG_" in ev_imp else "Sedang"
 
+        # Format pure Indonesian WIB timestamps (locale-independent, never English on Linux)
+        sched_wib_id = MacroIntelligenceService.format_wib_id(sched_utc, with_day=True, with_year=True)
+        now_wib_id = MacroIntelligenceService.format_wib_id(now_utc, with_day=True, with_year=True)
+
         # 7. If Claude or Gemini API key is present, invoke LLM with live dynamic payload
         if settings.ANTHROPIC_API_KEY or settings.GEMINI_API_KEY:
             try:
                 context_payload = {
                     "event_title": event_name,
                     "currency": currency,
-                    "scheduled_at_wib": sched_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
+                    "scheduled_at_wib": sched_wib_id,
                     "scheduled_at_utc": sched_utc.strftime("%Y-%m-%d %H:%M UTC"),
                     "actual": actual_val,
                     "consensus": consensus_val,
@@ -412,7 +416,7 @@ class NewsIntelligenceService:
                         consensus_val=consensus_val,
                         previous_val=previous_val,
                         actual_val=actual_val,
-                        sched_wib_str=sched_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
+                        sched_wib_str=sched_wib_id,
                         sched_utc_str=sched_utc.strftime("%Y-%m-%d %H:%M UTC"),
                         curr_price=curr_price,
                         sup1=sup1,
@@ -420,7 +424,7 @@ class NewsIntelligenceService:
                         res1=res1,
                         res2=res2,
                         pending_catalysts=pending_catalysts,
-                        now_wib_str=now_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
+                        now_wib_str=now_wib_id,
                         dynamic_fallback_plan=dynamic_plan,
                         intermarket_snapshot=intermarket_snap,
                         event_comparison_note=event_comparison_note,
@@ -439,7 +443,7 @@ class NewsIntelligenceService:
             consensus_val=consensus_val,
             previous_val=previous_val,
             actual_val=actual_val,
-            sched_wib_str=sched_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
+            sched_wib_str=sched_wib_id,
             sched_utc_str=sched_utc.strftime("%Y-%m-%d %H:%M UTC"),
             curr_price=curr_price,
             sup1=sup1,
@@ -447,7 +451,7 @@ class NewsIntelligenceService:
             res1=res1,
             res2=res2,
             pending_catalysts=pending_catalysts,
-            now_wib_str=now_wib.strftime("%A, %d %B %Y, %H:%M WIB"),
+            now_wib_str=now_wib_id,
             dynamic_fallback_plan=dynamic_plan,
             intermarket_snapshot=intermarket_snap,
             event_comparison_note=event_comparison_note,
@@ -1256,8 +1260,11 @@ class NewsIntelligenceService:
 
             seen_titles.add(base_title)
 
-            ev_utc = ev.scheduled_at.replace(tzinfo=timezone.utc)
-            ev_wib = ev_utc.astimezone(WIB)
+            ev_utc = (
+                ev.scheduled_at.replace(tzinfo=timezone.utc)
+                if ev.scheduled_at.tzinfo is None
+                else ev.scheduled_at.astimezone(timezone.utc)
+            )
 
             f_str = f"F: {ev.forecast_value}" if ev.forecast_value else ""
             p_str = f"P: {ev.previous_value}" if ev.previous_value else ""
@@ -1266,7 +1273,7 @@ class NewsIntelligenceService:
 
             tag_suffix = f" • {tag}" if tag else ""
             results.append({
-                "time_wib": ev_wib.strftime("%d %b, %H:%M WIB") + f" ({ev_utc.strftime('%H:%M')} UTC)",
+                "time_wib": MacroIntelligenceService.format_wib_id(ev_utc, with_day=False, with_year=False),
                 "event": f"[{ev.currency}] {ev.event_title}{num_suffix}{tag_suffix}"
             })
             if len(results) >= 7:
@@ -1274,12 +1281,12 @@ class NewsIntelligenceService:
 
         if not results:
             results = [
-                {"time_wib": "30 Sep, 19:15 WIB (12:15 UTC)", "event": "[USD] ADP Non-Farm Employment (F: 73K, P: 38K) • Data pendahulu serapan kerja swasta"},
-                {"time_wib": "30 Sep, 19:30 WIB (12:30 UTC)", "event": "[USD] Core PCE Price Index m/m (F: 0.3%, P: 0.2%) • Barometer inflasi acuan suku bunga Fed"},
-                {"time_wib": "01 Okt, 19:30 WIB (12:30 UTC)", "event": "[USD] Initial Jobless Claims (F: 201K, P: 197K) • Deteksi dini PHK mingguan sebelum NFP"},
-                {"time_wib": "02 Okt, 19:30 WIB (12:30 UTC)", "event": "[USD] Non-Farm Employment Change (F: 90K, P: 162K) • Katalis puncak ketenagakerjaan AS"},
-                {"time_wib": "02 Okt, 19:30 WIB (12:30 UTC)", "event": "[USD] Unemployment Rate (F: 4.1%, P: 4.1%) • Rilis serentak: tingkat pengangguran nasional"},
-                {"time_wib": "02 Okt, 19:30 WIB (12:30 UTC)", "event": "[USD] Average Hourly Earnings (F: 0.3%, P: 0.3%) • Rilis serentak: tekanan upah pekerja"}
+                {"time_wib": "30 Sep • 19:15 WIB", "event": "[USD] ADP Non-Farm Employment (F: 73K, P: 38K) • Data pendahulu serapan kerja swasta"},
+                {"time_wib": "30 Sep • 19:30 WIB", "event": "[USD] Core PCE Price Index m/m (F: 0.3%, P: 0.2%) • Barometer inflasi acuan suku bunga Fed"},
+                {"time_wib": "01 Okt • 19:30 WIB", "event": "[USD] Initial Jobless Claims (F: 201K, P: 197K) • Deteksi dini PHK mingguan sebelum NFP"},
+                {"time_wib": "02 Okt • 19:30 WIB", "event": "[USD] Non-Farm Employment Change (F: 90K, P: 162K) • Katalis puncak ketenagakerjaan AS"},
+                {"time_wib": "02 Okt • 19:30 WIB", "event": "[USD] Unemployment Rate (F: 4.1%, P: 4.1%) • Rilis serentak: tingkat pengangguran nasional"},
+                {"time_wib": "02 Okt • 19:30 WIB", "event": "[USD] Average Hourly Earnings (F: 0.3%, P: 0.3%) • Rilis serentak: tekanan upah pekerja"}
             ]
 
         return results

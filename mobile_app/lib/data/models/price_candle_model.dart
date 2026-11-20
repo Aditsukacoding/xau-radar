@@ -1,3 +1,5 @@
+import '../../core/utils/wib_date_time.dart';
+
 class PriceCandleModel {
   final int id;
   final String symbol;
@@ -28,7 +30,7 @@ class PriceCandleModel {
       id: json['id'] ?? 0,
       symbol: json['symbol'] ?? 'XAUUSD',
       timeframe: json['timeframe'] ?? '1h',
-      timestamp: DateTime.tryParse(json['timestamp'] ?? '') ?? DateTime.now(),
+      timestamp: parseUtcDateTime(json['timestamp']?.toString()),
       open: (json['open'] as num?)?.toDouble() ?? 0.0,
       high: (json['high'] as num?)?.toDouble() ?? 0.0,
       low: (json['low'] as num?)?.toDouble() ?? 0.0,

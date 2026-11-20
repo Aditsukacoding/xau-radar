@@ -1,6 +1,35 @@
-/// Utility & Extension for Indonesian Western Standard Time (Waktu Indonesia Barat - WIB / UTC+7).
-/// Ensures all timestamps, economic schedules, candles, and news articles across the application
-/// are accurately displayed in Indonesian WIB without relying on external system locale settings.
+// Utility & Extension for Indonesian Western Standard Time (Waktu Indonesia Barat - WIB / UTC+7).
+// Ensures all timestamps, economic schedules, candles, and news articles across the application
+// are accurately displayed in Indonesian WIB without relying on external system locale settings.
+
+/// Safely parses any ISO-8601 timestamp string from backend (FastAPI / SQLite) as UTC.
+/// Naive strings without 'Z' or timezone offset (common from SQLite) are treated explicitly as UTC
+/// so `.toWib()` always converts accurately to WIB (UTC+7) without a 7-hour shift!
+DateTime parseUtcDateTime(String? raw, {DateTime? fallback}) {
+  final fb = (fallback ?? DateTime.now()).toUtc();
+  if (raw == null || raw.trim().isEmpty) return fb;
+  final s = raw.trim();
+  final dt = DateTime.tryParse(s);
+  if (dt == null) return fb;
+  if (dt.isUtc) return dt;
+  // Check whether the original string carried an explicit timezone offset (e.g. +07:00 or -04:00)
+  final hasExplicitOffset = RegExp(r'(Z|[+-]\d{2}:?\d{2})$', caseSensitive: false).hasMatch(s);
+  if (hasExplicitOffset) {
+    return dt.toUtc();
+  }
+  // Naive timestamp from SQLite -> treat its wall-clock fields as UTC explicitly
+  return DateTime.utc(
+    dt.year,
+    dt.month,
+    dt.day,
+    dt.hour,
+    dt.minute,
+    dt.second,
+    dt.millisecond,
+    dt.microsecond,
+  );
+}
+
 extension WibDateTimeExtension on DateTime {
   /// Converts any DateTime (UTC or system local) to Indonesian WIB (UTC+7).
   DateTime toWib() {

@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict, field_serializer
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 
@@ -77,6 +77,12 @@ class AnalysisReportResponse(BaseModel):
     disclaimer: str
     created_at: datetime
 
+    @field_serializer("created_at")
+    def serialize_created_at_utc(self, dt: datetime) -> str:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -97,3 +103,9 @@ class DashboardSummaryResponse(BaseModel):
     technical_snapshot: Dict[str, Any]
     disclaimer: str
     last_updated: datetime
+
+    @field_serializer("last_updated")
+    def serialize_last_updated_utc(self, dt: datetime) -> str:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()

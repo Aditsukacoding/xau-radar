@@ -1,3 +1,4 @@
+import '../../core/utils/wib_date_time.dart';
 import 'trade_setup_model.dart';
 
 class DashboardSummaryModel {
@@ -54,7 +55,7 @@ class DashboardSummaryModel {
       latestGeopoliticalHeadline: json['latest_geopolitical_headline'],
       technicalSnapshot: json['technical_snapshot'] ?? {},
       disclaimer: json['disclaimer'] ?? '',
-      lastUpdated: DateTime.tryParse(json['last_updated'] ?? '') ?? DateTime.now(),
+      lastUpdated: parseUtcDateTime(json['last_updated']?.toString()),
     );
   }
 

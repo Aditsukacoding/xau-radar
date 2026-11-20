@@ -60,10 +60,13 @@ async def get_dashboard_summary(symbol: str = "XAUUSD", db: Session = Depends(ge
     )
     event_dict = None
     if next_event:
+        ev_sched = next_event.scheduled_at
+        if ev_sched.tzinfo is None:
+            ev_sched = ev_sched.replace(tzinfo=timezone.utc)
         event_dict = {
             "title": next_event.event_title,
             "impact": next_event.impact_level,
-            "scheduled_at": next_event.scheduled_at.isoformat(),
+            "scheduled_at": ev_sched.astimezone(timezone.utc).isoformat(),
             "currency": next_event.currency,
             "forecast": next_event.forecast_value,
             "previous": next_event.previous_value,
@@ -78,12 +81,15 @@ async def get_dashboard_summary(symbol: str = "XAUUSD", db: Session = Depends(ge
     )
     news_dict = None
     if latest_news:
+        pub_dt = latest_news.published_at
+        if pub_dt.tzinfo is None:
+            pub_dt = pub_dt.replace(tzinfo=timezone.utc)
         news_dict = {
             "title": latest_news.title,
             "source": latest_news.source,
             "sentiment_label": latest_news.sentiment_label,
             "sentiment_score": latest_news.sentiment_score,
-            "published_at": latest_news.published_at.isoformat(),
+            "published_at": pub_dt.astimezone(timezone.utc).isoformat(),
         }
 
     # Technical quick check
@@ -130,7 +136,11 @@ async def get_dashboard_summary(symbol: str = "XAUUSD", db: Session = Depends(ge
             "intermarket": intermarket,
         },
         disclaimer=report.disclaimer,
-        last_updated=report.created_at,
+        last_updated=(
+            report.created_at.replace(tzinfo=timezone.utc)
+            if report.created_at and report.created_at.tzinfo is None
+            else (report.created_at.astimezone(timezone.utc) if report.created_at else now)
+        ),
     )
 
 

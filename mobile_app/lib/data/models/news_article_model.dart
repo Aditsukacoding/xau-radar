@@ -1,3 +1,5 @@
+import '../../core/utils/wib_date_time.dart';
+
 class NewsArticleModel {
   final int id;
   final String symbol;
@@ -31,7 +33,7 @@ class NewsArticleModel {
       summary: json['summary'],
       sentimentLabel: json['sentiment_label'] ?? 'NEUTRAL',
       sentimentScore: (json['sentiment_score'] as num?)?.toDouble() ?? 0.0,
-      publishedAt: DateTime.tryParse(json['published_at'] ?? '') ?? DateTime.now(),
+      publishedAt: parseUtcDateTime(json['published_at']?.toString()),
     );
   }
 }

@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 WIB = timezone(timedelta(hours=7))
 
+_ID_DAYS = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
+_ID_MONTHS = ("", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des")
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -82,6 +85,25 @@ class MacroIntelligenceService:
         "philly fed",
         "cb consumer",
     )
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 0. INDONESIAN WIB (UTC+7) DATE/TIME FORMATTER (LOCALE-INDEPENDENT)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def format_wib_id(dt: datetime, with_day: bool = False, with_year: bool = False) -> str:
+        """
+        Formats any datetime into pure Indonesian WIB (UTC+7) without OS locale dependency.
+        - with_day=True, with_year=True  -> 'Rabu, 18 Nov 2026 • 14:00 WIB'
+        - with_day=False, with_year=False -> '18 Nov • 14:00 WIB'
+        """
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        wib = dt.astimezone(WIB)
+        day_prefix = f"{_ID_DAYS[wib.weekday()]}, " if with_day else ""
+        month_str = _ID_MONTHS[wib.month]
+        year_part = f" {wib.year}" if with_year else ""
+        return f"{day_prefix}{wib.day:02d} {month_str}{year_part} • {wib.hour:02d}:{wib.minute:02d} WIB"
 
     # ═══════════════════════════════════════════════════════════════════════════
     # 1. NUMERIC ECONOMIC SURPRISE EVALUATOR (ACTUAL vs FORECAST vs PREVIOUS)
@@ -628,7 +650,7 @@ class MacroIntelligenceService:
             reactions.append({
                 "event_title": str(ev.get("event_title") or "USD Data"),
                 "impact_level": imp,
-                "released_at_wib": sched_utc.astimezone(WIB).strftime("%d %b, %H:%M WIB"),
+                "released_at_wib": cls.format_wib_id(sched_utc, with_day=False, with_year=False),
                 "actual": str(ev.get("actual_value") or "-"),
                 "forecast": str(ev.get("forecast_value") or "-"),
                 "previous": str(ev.get("previous_value") or "-"),

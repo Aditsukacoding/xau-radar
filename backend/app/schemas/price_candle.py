@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict, field_serializer
+from datetime import datetime, timezone
 from typing import List, Optional
 
 
@@ -20,6 +20,12 @@ class PriceCandleCreate(PriceCandleBase):
 
 class PriceCandleResponse(PriceCandleBase):
     id: int
+
+    @field_serializer("timestamp")
+    def serialize_timestamp_utc(self, dt: datetime) -> str:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,3 +1,4 @@
+import '../../core/utils/wib_date_time.dart';
 import 'trade_setup_model.dart';
 
 class KeyLevelsModel {
@@ -81,7 +82,7 @@ class AnalysisReportModel {
               .toList() ??
           [],
       disclaimer: json['disclaimer'] ?? '',
-      createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
+      createdAt: parseUtcDateTime(json['created_at']?.toString()),
     );
   }
 }

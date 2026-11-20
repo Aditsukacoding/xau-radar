@@ -842,7 +842,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (data.upcomingHighImpactEvent!['scheduled_at'] != null) ...[
                       const SizedBox(height: 4),
                       Text(
-                        DateTime.tryParse(data.upcomingHighImpactEvent!['scheduled_at'] ?? '')?.formatWibWithDay() ?? '-',
+                        data.upcomingHighImpactEvent!['scheduled_at'] != null
+                            ? parseUtcDateTime(data.upcomingHighImpactEvent!['scheduled_at'].toString()).formatWibWithDay()
+                            : '-',
                         style: AppTypography.mono(
                           color: AppColors.gold,
                           fontSize: 11,
@@ -945,7 +947,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     summary: h['summary'] ?? h['title'],
                     sentimentLabel: h['sentiment_label'] ?? 'NEUTRAL',
                     sentimentScore: (h['sentiment_score'] as num?)?.toDouble() ?? 0.0,
-                    publishedAt: DateTime.tryParse(h['published_at'] ?? '') ?? DateTime.now(),
+                    publishedAt: parseUtcDateTime(h['published_at']?.toString()),
                   );
                   NewsDetailSheet.show(context, article);
                 },
@@ -1002,7 +1004,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                '${h['source'] ?? 'Global Wire'}${h['published_at'] != null ? ' • ${DateTime.tryParse(h['published_at'] ?? '')?.formatWibShort() ?? ''}' : ''}',
+                                '${h['source'] ?? 'Global Wire'}${h['published_at'] != null ? ' • ${parseUtcDateTime(h['published_at'].toString()).formatWibShort()}' : ''}',
                                 style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
