@@ -92,16 +92,17 @@ async def get_dashboard_summary(symbol: str = "XAUUSD", db: Session = Depends(ge
             "published_at": pub_dt.astimezone(timezone.utc).isoformat(),
         }
 
-    # Technical quick check
-    candles = (
+    # Technical quick check (bounded to latest 80 candles for fast remote PostgreSQL response)
+    candles_desc = (
         db.query(PriceCandle)
         .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == "1h")
-        .order_by(PriceCandle.timestamp.asc())
+        .order_by(desc(PriceCandle.timestamp))
+        .limit(80)
         .all()
     )
     candles_list = [
         {"open": c.open, "high": c.high, "low": c.low, "close": c.close, "volume": c.volume, "timestamp": c.timestamp}
-        for c in candles
+        for c in reversed(candles_desc)
     ]
     tech_data = TechnicalCalculator.calculate_indicators(candles_list)
 
