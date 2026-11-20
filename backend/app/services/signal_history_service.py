@@ -740,10 +740,16 @@ class SignalHistoryService:
         except Exception:
             curr_price = 0.0
 
-        # 1. Ensure authentic 14-day candle-verified audit exists on cold start
-        await cls.ensure_verified_history(db, sym)
+        # 1. Pure LIVE-only ledger: purge any legacy backtest/replay rows so we start cleanly from scratch
+        legacy_audit = (
+            db.query(TradeSignalHistory)
+            .filter(TradeSignalHistory.symbol == sym, TradeSignalHistory.source_type != "LIVE")
+            .delete(synchronize_session=False)
+        )
+        if legacy_audit:
+            db.commit()
 
-        # 1b. Ensure latest active AnalysisReport setup is mirrored into LIVE ledger (helpful after cold start)
+        # 1b. Mirror the current active Dashboard setup into LIVE ledger if none exists yet
         has_live = (
             db.query(TradeSignalHistory)
             .filter(TradeSignalHistory.symbol == sym, TradeSignalHistory.source_type == "LIVE")
@@ -767,10 +773,10 @@ class SignalHistoryService:
         # 2. Re-evaluate any open LIVE signals against latest 15m candles + spot price
         await cls.evaluate_open_signals(db, sym, curr_price=curr_price)
 
-        # 3. Query all records for honest aggregate stats
+        # 3. Query ONLY real-time LIVE records (zero backtest/demo data)
         all_rows = (
             db.query(TradeSignalHistory)
-            .filter(TradeSignalHistory.symbol == sym)
+            .filter(TradeSignalHistory.symbol == sym, TradeSignalHistory.source_type == "LIVE")
             .order_by(desc(TradeSignalHistory.created_at))
             .limit(80)
             .all()
@@ -933,7 +939,8 @@ class SignalHistoryService:
             stats=stats,
             items=items,
             methodology_note=(
-                "Diverifikasi objektif terhadap candle OHLC XAU/USD asli (aturan konservatif: jika 1 candle menyentuh SL & TP "
-                "bersamaan sebelum TP1, dihitung SL). Pips bersih mengikuti manajemen 3-tier: 40% TP1 (SL→BEP), 40% TP2 (SL→TP1), 20% TP3."
+                "100% pencatatan LIVE real-time dari awal (tanpa backtest/simulasi). Setiap sinyal yang keluar di Dashboard "
+                "otomatis dipantau terhadap candle OHLC XAU/USD asli (aturan konservatif: jika 1 candle menyentuh SL & TP "
+                "bersamaan sebelum TP1, dihitung SL). Pips mengikuti 3-tier: 40% TP1 (SL→BEP), 40% TP2 (SL→TP1), 20% TP3."
             ),
         )

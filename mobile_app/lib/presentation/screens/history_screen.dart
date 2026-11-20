@@ -543,14 +543,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6.5, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceInset,
+                    color: AppColors.cyan.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.border, width: 0.7),
+                    border: Border.all(color: AppColors.cyan.withValues(alpha: 0.30), width: 0.7),
                   ),
-                  child: Text(
-                    item.sourceType == 'LIVE' ? 'LIVE' : 'AUDIT 14H',
+                  child: const Text(
+                    'LIVE',
                     style: TextStyle(
-                      color: item.sourceType == 'LIVE' ? AppColors.cyan : AppColors.textMuted,
+                      color: AppColors.cyan,
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.4,
@@ -822,14 +822,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildEmptyFilterState() {
+    final isFreshAll = _outcomeFilter == 'ALL' && _actionFilter == 'ALL';
     return IosGlassCard(
       borderRadius: 18,
       padding: const EdgeInsets.all(22),
-      child: const Center(
-        child: Text(
-          'Tidak ada riwayat entry untuk filter ini.',
-          style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-        ),
+      child: Column(
+        children: [
+          Icon(
+            isFreshAll ? LucideIcons.radar : LucideIcons.filter,
+            color: AppColors.gold,
+            size: 24,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            isFreshAll
+                ? 'Pencatatan LIVE Dimulai dari Awal'
+                : 'Belum ada riwayat LIVE untuk filter ini',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isFreshAll
+                ? 'Setiap setup baru yang muncul di Dashboard akan otomatis tercatat di sini dan diverifikasi real-time hingga menyentuh SL atau TP1–TP3.'
+                : 'Hasil TP Hit / SL Hit akan tercatat otomatis begitu sinyal live yang berjalan mencapai target atau Stop Loss.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11.5,
+              height: 1.45,
+            ),
+          ),
+        ],
       ),
     );
   }

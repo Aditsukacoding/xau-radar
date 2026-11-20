@@ -4,8 +4,12 @@ from app.core.config import settings
 import os
 
 # Ensure database URL is safe for serverless/read-only environments
+# (Preserve external PostgreSQL URLs like Neon/Supabase if configured via DATABASE_URL)
 db_url = settings.DATABASE_URL
-if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+if (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")) and db_url.startswith("sqlite"):
     db_url = "sqlite:////tmp/trading_analytics.db"
 
 if db_url.startswith("sqlite"):
