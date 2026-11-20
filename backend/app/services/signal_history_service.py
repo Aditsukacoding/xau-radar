@@ -49,6 +49,7 @@ def _norm_candle_ts(raw: Any) -> Optional[datetime]:
 
 class SignalHistoryService:
     """Tracks, verifies, and summarizes real SL / TP1 / TP2 / TP3 outcomes for XAU/USD setups."""
+    _last_eval_ts: Dict[str, float] = {}
 
     @staticmethod
     def _compute_realized_pips(
@@ -392,20 +393,19 @@ class SignalHistoryService:
 
         now_utc = _to_utc(created_at) or datetime.now(timezone.utc)
 
-        # Deduplicate: skip if we already recorded an almost identical LIVE signal in the last 90 minutes
-        recent = (
+        # Strict single-active-signal rule: never stack overlapping open LIVE signals
+        existing_open = (
             db.query(TradeSignalHistory)
             .filter(
                 TradeSignalHistory.symbol == symbol.upper(),
                 TradeSignalHistory.source_type == "LIVE",
-                TradeSignalHistory.action == action,
-                TradeSignalHistory.created_at >= (now_utc - timedelta(minutes=90)),
+                TradeSignalHistory.is_closed == False,
             )
             .order_by(desc(TradeSignalHistory.created_at))
             .first()
         )
-        if recent and abs(recent.entry_price - entry_p) <= 2.20 and not recent.is_closed:
-            return recent
+        if existing_open:
+            return existing_open
 
         exec_type = str(trade_setup.get("execution_type", "LIMIT")).upper()
         init_outcome = "ACTIVE" if exec_type == "INSTANT" else "PENDING_LIMIT"
@@ -448,35 +448,97 @@ class SignalHistoryService:
         return row
 
     @classmethod
+    def _cleanup_duplicate_open_signals(cls, db: Session, symbol: str) -> int:
+        """
+        If concurrent serverless cold starts created >1 unclosed LIVE signals simultaneously,
+        keeps ONLY the single open row matching the current locked AnalysisReport (or latest 1)
+        and removes duplicate unclosed rows. Never touches closed SL/TP history!
+        """
+        sym = symbol.upper()
+        open_rows = (
+            db.query(TradeSignalHistory)
+            .filter(
+                TradeSignalHistory.symbol == sym,
+                TradeSignalHistory.source_type == "LIVE",
+                TradeSignalHistory.is_closed == False,
+            )
+            .order_by(desc(TradeSignalHistory.created_at))
+            .all()
+        )
+        if len(open_rows) <= 1:
+            return 0
+
+        keep_id = open_rows[0].id
+        try:
+            import json
+            from app.models.analysis_report import AnalysisReport
+            latest_rep = (
+                db.query(AnalysisReport)
+                .filter(AnalysisReport.symbol == sym)
+                .order_by(desc(AnalysisReport.created_at))
+                .first()
+            )
+            if latest_rep and latest_rep.trade_setup_json:
+                active_ts = json.loads(latest_rep.trade_setup_json)
+                act_entry = float(active_ts.get("entry_price") or 0.0)
+                act_sl = float(active_ts.get("stop_loss") or 0.0)
+                for row in open_rows:
+                    if abs(row.entry_price - act_entry) <= 0.50 and abs(row.stop_loss - act_sl) <= 0.50:
+                        keep_id = row.id
+                        break
+        except Exception:
+            pass
+
+        removed = 0
+        for row in open_rows:
+            if row.id != keep_id:
+                db.delete(row)
+                removed += 1
+        if removed:
+            db.commit()
+        return removed
+
+    @classmethod
     async def evaluate_open_signals(
         cls,
         db: Session,
         symbol: str = "XAUUSD",
         curr_price: Optional[float] = None,
+        force: bool = False,
     ) -> int:
-        """Evaluates all unclosed signals against authentic live 15m Yahoo Finance candles + live spot."""
+        """Evaluates unclosed signals against authentic live 15m Yahoo Finance candles + live spot (with 45s cache)."""
+        import time
+        sym = symbol.upper()
+        now_ts = time.time()
+        if not force and (now_ts - cls._last_eval_ts.get(sym, 0.0)) < 45.0:
+            return 0
+
+        cls._cleanup_duplicate_open_signals(db, sym)
+
         open_rows = (
             db.query(TradeSignalHistory)
             .filter(
-                TradeSignalHistory.symbol == symbol.upper(),
+                TradeSignalHistory.symbol == sym,
+                TradeSignalHistory.source_type == "LIVE",
                 TradeSignalHistory.is_closed == False,
             )
             .order_by(TradeSignalHistory.created_at.asc())
             .all()
         )
         if not open_rows:
+            cls._last_eval_ts[sym] = now_ts
             return 0
 
         provider = get_data_provider()
         if not curr_price or curr_price <= 0:
             try:
-                snap = await provider.get_latest_price(symbol)
+                snap = await provider.get_latest_price(sym)
                 curr_price = float(snap.get("current_price") or 0.0)
             except Exception:
                 curr_price = 0.0
 
         try:
-            candles = await provider.get_price_candles(symbol=symbol, timeframe="15m", count=180)
+            candles = await provider.get_price_candles(symbol=sym, timeframe="15m", count=180)
         except Exception:
             candles = []
 
@@ -499,7 +561,7 @@ class SignalHistoryService:
                 candles=candles,
                 curr_price=curr_price,
                 now_utc=now_utc,
-                expire_hours=10.0,
+                expire_hours=12.0,
             )
             sig.outcome = res["outcome"]
             sig.is_closed = res["is_closed"]
@@ -513,6 +575,7 @@ class SignalHistoryService:
             updated += 1
 
         db.commit()
+        cls._last_eval_ts[sym] = now_ts
         return updated
 
     @classmethod
@@ -770,8 +833,8 @@ class SignalHistoryService:
             except Exception:
                 pass
 
-        # 2. Re-evaluate any open LIVE signals against latest 15m candles + spot price
-        await cls.evaluate_open_signals(db, sym, curr_price=curr_price)
+        # 2. Re-evaluate open LIVE signal against latest 15m candles + spot price
+        await cls.evaluate_open_signals(db, sym, curr_price=curr_price, force=True)
 
         # 3. Query ONLY real-time LIVE records (zero backtest/demo data)
         all_rows = (
