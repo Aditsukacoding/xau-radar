@@ -10,20 +10,27 @@ class KeyLevels(BaseModel):
 
 class TradeSetup(BaseModel):
     action: str = "WAIT"  # BUY, SELL, WAIT
-    action_label: str = "WAIT / STANDBY"  # e.g. BUY (LONG), SELL (SHORT), WAIT / MONITOR
-    entry_zone: str = ""  # e.g. $4202.00 - $4208.50
+    action_label: str = "WAIT / STANDBY"  # e.g. BUY NOW (SCALP), SELL LIMIT (PULLBACK)
+    execution_type: str = "INSTANT"  # INSTANT, LIMIT, WAIT
+    scalp_timeframe: str = "M5 / M15"
+    session_name: str = ""
+    atr_pips: float = 0.0
+    entry_zone: str = ""  # e.g. $3562.50 - $3564.20
     entry_price: float = 0.0
     stop_loss: float = 0.0
     take_profit_1: float = 0.0
     take_profit_2: float = 0.0
-    risk_reward_ratio: str = "1 : 2.0"
+    take_profit_3: float = 0.0
+    risk_reward_ratio: str = "1 : 2.5"
     risk_pips: float = 0.0
     reward_tp1_pips: float = 0.0
     reward_tp2_pips: float = 0.0
+    reward_tp3_pips: float = 0.0
+    lot_management: str = "40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3"
     technical_rationale: str = ""
     invalidation_level: str = ""
-    status: str = "ACTIVE"  # ACTIVE, RUNNING_TP1_HIT, COMPLETED, STOPPED_OUT
-    status_message: str = "Setup Konsisten Terkunci (Menunggu Target / SL)"
+    status: str = "ACTIVE"  # ACTIVE, RUNNING_TP1_HIT, RUNNING_TP2_HIT, COMPLETED, STOPPED_OUT
+    status_message: str = "Setup Scalping Aktif (Siap Eksekusi)"
 
 
 class AnalysisReportBase(BaseModel):

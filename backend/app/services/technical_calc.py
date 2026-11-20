@@ -1,18 +1,72 @@
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 
 
 class TechnicalCalculator:
     """
-    Pure Python technical indicator calculator (zero C-extension/DLL dependencies).
-    Calculates RSI (14), SMA (20, 50, 200), EMA (9, 21), and dynamic Support & Resistance.
+    Pure Python institutional technical & scalping indicator calculator.
+    Calculates RSI (14), ATR (14), SMA (20, 50, 200), EMA (9, 21),
+    fractal Swing High/Low structure, price-action momentum, active market session,
+    and dynamic Support & Resistance levels.
     """
 
     @staticmethod
-    def calculate_indicators(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
-        if not candles or len(candles) < 15:
+    def detect_active_session(now_utc: Optional[datetime] = None) -> Dict[str, Any]:
+        """Detects active global XAU/USD trading session and typical volatility profile."""
+        dt = now_utc or datetime.now(timezone.utc)
+        hour_utc = dt.hour
+
+        if 12 <= hour_utc < 16:
             return {
-                "latest_price": candles[-1]["close"] if candles else 0.0,
+                "name": "London-NY Killzone",
+                "volatility": "HIGH",
+                "wib_window": "19:00 - 23:00 WIB",
+                "atr_sl_mult": 1.35,
+            }
+        if 7 <= hour_utc < 12:
+            return {
+                "name": "London Session",
+                "volatility": "MEDIUM_HIGH",
+                "wib_window": "14:00 - 19:00 WIB",
+                "atr_sl_mult": 1.25,
+            }
+        if 16 <= hour_utc < 21:
+            return {
+                "name": "New York Session",
+                "volatility": "MEDIUM_HIGH",
+                "wib_window": "23:00 - 04:00 WIB",
+                "atr_sl_mult": 1.25,
+            }
+        if 0 <= hour_utc < 7:
+            return {
+                "name": "Asian Session",
+                "volatility": "LOW_MEDIUM",
+                "wib_window": "07:00 - 14:00 WIB",
+                "atr_sl_mult": 1.10,
+            }
+        return {
+            "name": "NY Rollover / Thin Liquidity",
+            "volatility": "LOW",
+            "wib_window": "04:00 - 07:00 WIB",
+            "atr_sl_mult": 1.15,
+        }
+
+    @staticmethod
+    def calculate_indicators(candles: List[Dict[str, Any]]) -> Dict[str, Any]:
+        session_info = TechnicalCalculator.detect_active_session()
+
+        if not candles or len(candles) < 15:
+            latest = round(float(candles[-1]["close"]), 2) if candles else 0.0
+            return {
+                "latest_price": latest,
+                "atr_14": 3.5,
+                "atr_pips": 35.0,
                 "trend_direction": "NEUTRAL",
+                "price_action": "INSUFFICIENT_DATA",
+                "session_name": session_info["name"],
+                "session_volatility": session_info["volatility"],
+                "swing_highs": [],
+                "swing_lows": [],
                 "summary": "Data candle tidak cukup untuk kalkulasi teknikal lengkap (minimal 15 candle).",
                 "support_levels": [],
                 "resistance_levels": [],
@@ -21,8 +75,6 @@ class TechnicalCalculator:
         # Sort chronologically by timestamp
         sorted_candles = sorted(candles, key=lambda c: c["timestamp"])
         closes = [float(c["close"]) for c in sorted_candles]
-        highs = [float(c["high"]) for c in sorted_candles]
-        lows = [float(c["low"]) for c in sorted_candles]
         latest_price = round(closes[-1], 2)
         n = len(closes)
 
@@ -38,26 +90,44 @@ class TechnicalCalculator:
         # 3. Relative Strength Index (RSI 14)
         rsi_14, rsi_condition = TechnicalCalculator._calculate_rsi(closes, period=14)
 
-        # 4. Support and Resistance Levels
+        # 4. Average True Range (ATR 14) for dynamic volatility-calibrated SL/TP
+        atr_14 = TechnicalCalculator._calculate_atr(sorted_candles, period=14)
+        atr_pips = round(atr_14 * 10.0, 1)
+
+        # 5. Fractal Swing Highs & Swing Lows
+        swing_lows, swing_highs = TechnicalCalculator._detect_swing_points(sorted_candles, latest_price)
+
+        # 6. Dynamic Support and Resistance Levels (pure market structure, zero hardcoded legacy levels)
         supports, resistances = TechnicalCalculator._detect_key_levels(
-            sorted_candles, latest_price
+            sorted_candles, latest_price, swing_lows, swing_highs, atr_14
         )
 
-        # 5. Trend Direction Analysis
+        # 7. Micro Price Action Signal (last 3 candles)
+        price_action, pa_note = TechnicalCalculator._detect_price_action(sorted_candles, ema_9, ema_21)
+
+        # 8. Trend Direction Analysis
         trend_direction, trend_summary = TechnicalCalculator._determine_trend(
-            latest_price, ema_9, ema_21, sma_20, sma_50, rsi_14
+            latest_price, ema_9, ema_21, sma_20, sma_50, rsi_14, pa_note
         )
 
         return {
             "latest_price": latest_price,
             "rsi_14": rsi_14,
             "rsi_condition": rsi_condition,
+            "atr_14": atr_14,
+            "atr_pips": atr_pips,
             "sma_20": sma_20,
             "sma_50": sma_50,
             "sma_200": sma_200,
             "ema_9": ema_9,
             "ema_21": ema_21,
             "trend_direction": trend_direction,
+            "price_action": price_action,
+            "price_action_note": pa_note,
+            "session_name": session_info["name"],
+            "session_volatility": session_info["volatility"],
+            "swing_lows": swing_lows,
+            "swing_highs": swing_highs,
             "support_levels": supports,
             "resistance_levels": resistances,
             "summary": trend_summary,
@@ -68,27 +138,47 @@ class TechnicalCalculator:
         if len(values) < span:
             return None
         k = 2.0 / (span + 1.0)
-        # Start with simple average for first 'span' values
         ema = sum(values[:span]) / span
         for val in values[span:]:
             ema = (val * k) + (ema * (1.0 - k))
         return round(ema, 2)
 
     @staticmethod
+    def _calculate_atr(candles: List[Dict[str, Any]], period: int = 14) -> float:
+        if len(candles) < 2:
+            return 3.50
+        true_ranges: List[float] = []
+        for i in range(1, len(candles)):
+            high = float(candles[i]["high"])
+            low = float(candles[i]["low"])
+            prev_close = float(candles[i - 1]["close"])
+            tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+            true_ranges.append(tr)
+
+        if not true_ranges:
+            return 3.50
+
+        if len(true_ranges) < period:
+            atr = sum(true_ranges) / len(true_ranges)
+        else:
+            atr = sum(true_ranges[:period]) / period
+            for tr in true_ranges[period:]:
+                atr = ((atr * (period - 1)) + tr) / period
+
+        return round(max(1.20, atr), 2)
+
+    @staticmethod
     def _calculate_rsi(closes: List[float], period: int = 14) -> Tuple[Optional[float], str]:
         if len(closes) < period + 1:
             return None, "NEUTRAL"
 
-        # Calculate initial differences
         deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
         gains = [d if d > 0 else 0.0 for d in deltas]
         losses = [abs(d) if d < 0 else 0.0 for d in deltas]
 
-        # Initial average gain/loss
         avg_gain = sum(gains[:period]) / period
         avg_loss = sum(losses[:period]) / period
 
-        # Wilder's smoothing for subsequent periods
         for i in range(period, len(deltas)):
             avg_gain = (avg_gain * (period - 1) + gains[i]) / period
             avg_loss = (avg_loss * (period - 1) + losses[i]) / period
@@ -110,42 +200,137 @@ class TechnicalCalculator:
         return rsi_val, cond
 
     @staticmethod
-    def _detect_key_levels(candles: List[Dict[str, Any]], current_price: float) -> Tuple[List[float], List[float]]:
-        """Identify key support and resistance zones from local extrema and classical pivot"""
+    def _detect_swing_points(
+        candles: List[Dict[str, Any]],
+        current_price: float,
+        window: int = 2,
+    ) -> Tuple[List[float], List[float]]:
+        """Detects authentic local fractal swing lows and swing highs from OHLCV candles."""
+        recent = candles[-50:] if len(candles) > 50 else candles
+        n = len(recent)
+        lows: List[float] = []
+        highs: List[float] = []
+
+        if n >= (window * 2 + 1):
+            for i in range(window, n - window):
+                c_low = float(recent[i]["low"])
+                c_high = float(recent[i]["high"])
+                if all(c_low <= float(recent[j]["low"]) for j in range(i - window, i + window + 1) if j != i):
+                    if c_low < current_price:
+                        lows.append(round(c_low, 2))
+                if all(c_high >= float(recent[j]["high"]) for j in range(i - window, i + window + 1) if j != i):
+                    if c_high > current_price:
+                        highs.append(round(c_high, 2))
+
+        # Deduplicate close clusters (within $1.20) keeping nearest structural swings
+        def cluster_levels(levels: List[float], reverse: bool) -> List[float]:
+            ordered = sorted(set(levels), reverse=reverse)
+            clustered: List[float] = []
+            for lv in ordered:
+                if not clustered or abs(lv - clustered[-1]) >= 1.20:
+                    clustered.append(lv)
+            return clustered[:4]
+
+        return cluster_levels(lows, reverse=True), cluster_levels(highs, reverse=False)
+
+    @staticmethod
+    def _detect_key_levels(
+        candles: List[Dict[str, Any]],
+        current_price: float,
+        swing_lows: List[float],
+        swing_highs: List[float],
+        atr_14: float,
+    ) -> Tuple[List[float], List[float]]:
+        """Combines authentic fractal swings, recent range boundaries, and classical floor pivots."""
         prev = candles[-2] if len(candles) >= 2 else candles[-1]
         p_high = float(prev["high"])
         p_low = float(prev["low"])
         p_close = float(prev["close"])
 
-        # Classical Floor Pivot
         pivot = (p_high + p_low + p_close) / 3.0
         r1 = (2.0 * pivot) - p_low
         s1 = (2.0 * pivot) - p_high
         r2 = pivot + (p_high - p_low)
         s2 = pivot - (p_high - p_low)
 
-        # Recent 30 candles min and max
         recent = candles[-30:]
         recent_low = min(float(c["low"]) for c in recent)
         recent_high = max(float(c["high"]) for c in recent)
 
-        potential_supports = {round(s1, 2), round(s2, 2), round(recent_low, 2)}
-        potential_resistances = {round(r1, 2), round(r2, 2), round(recent_high, 2)}
+        potential_supports = set(swing_lows) | {round(s1, 2), round(s2, 2), round(recent_low, 2)}
+        potential_resistances = set(swing_highs) | {round(r1, 2), round(r2, 2), round(recent_high, 2)}
 
-        # Calibrate with FOREX.com key structural levels for XAU/USD
-        if 4000.0 <= current_price <= 4300.0:
-            potential_resistances.update([4151.23, 4146.50])
-            potential_supports.update([4138.50, 4136.50, 4124.08, 4112.91])
+        # Keep levels strictly below/above current_price within sensible intraday range
+        supports = sorted([s for s in potential_supports if (current_price - atr_14 * 12) <= s < current_price - 0.30], reverse=True)
+        resistances = sorted([r for r in potential_resistances if current_price + 0.30 < r <= (current_price + atr_14 * 12)])
 
-        supports = sorted([s for s in potential_supports if s <= current_price + 1.0])
-        resistances = sorted([r for r in potential_resistances if r >= current_price - 1.0])
+        # Deduplicate tightly packed levels (< $1.50 apart)
+        def dedup(lvls: List[float]) -> List[float]:
+            out: List[float] = []
+            for v in lvls:
+                if not out or abs(v - out[-1]) >= 1.50:
+                    out.append(v)
+            return out[:4]
+
+        supports = dedup(supports)
+        resistances = dedup(resistances)
 
         if not supports:
-            supports = [round(current_price * 0.99, 2)]
+            supports = [round(current_price - max(3.5, atr_14 * 1.4), 2), round(current_price - max(8.0, atr_14 * 2.8), 2)]
         if not resistances:
-            resistances = [round(current_price * 1.01, 2)]
+            resistances = [round(current_price + max(3.5, atr_14 * 1.4), 2), round(current_price + max(8.0, atr_14 * 2.8), 2)]
 
         return supports, resistances
+
+    @staticmethod
+    def _detect_price_action(
+        candles: List[Dict[str, Any]],
+        ema9: Optional[float],
+        ema21: Optional[float],
+    ) -> Tuple[str, str]:
+        """Reads the latest 3 candles for scalping price-action confirmation (rejection, engulfing, impulse)."""
+        if len(candles) < 3:
+            return "CONSOLIDATION", "Aksi harga konsolidasi ketat"
+
+        c_prev = candles[-2]
+        c_last = candles[-1]
+
+        o1, h1, l1, cl1 = float(c_prev["open"]), float(c_prev["high"]), float(c_prev["low"]), float(c_prev["close"])
+        o2, h2, l2, cl2 = float(c_last["open"]), float(c_last["high"]), float(c_last["low"]), float(c_last["close"])
+
+        body2 = abs(cl2 - o2)
+        range2 = max(h2 - l2, 0.01)
+        upper_wick = h2 - max(o2, cl2)
+        lower_wick = min(o2, cl2) - l2
+
+        # Bullish Pinbar / Demand Sweep
+        if lower_wick >= range2 * 0.50 and cl2 >= o2 - (range2 * 0.15):
+            return "BULLISH_REJECTION", "Ekor bawah panjang (rejection buyer / sweep likuiditas demand)"
+
+        # Bearish Pinbar / Supply Sweep
+        if upper_wick >= range2 * 0.50 and cl2 <= o2 + (range2 * 0.15):
+            return "BEARISH_REJECTION", "Ekor atas panjang (rejection seller / sweep likuiditas supply)"
+
+        # Bullish Engulfing / Strong Impulse
+        if cl2 > o2 and cl1 < o1 and cl2 > o1 and body2 >= abs(cl1 - o1):
+            return "BULLISH_ENGULFING", "Pola Bullish Engulfing aktif mengonfirmasi dorongan buyer"
+
+        # Bearish Engulfing / Strong Impulse
+        if cl2 < o2 and cl1 > o1 and cl2 < o1 and body2 >= abs(cl1 - o1):
+            return "BEARISH_ENGULFING", "Pola Bearish Engulfing aktif mengonfirmasi tekanan seller"
+
+        # Momentum displacement
+        if cl2 > o2 and body2 >= range2 * 0.60:
+            return "BULLISH_IMPULSE", "Candle dorongan bullish kuat (momentum buyer dominan)"
+        if cl2 < o2 and body2 >= range2 * 0.60:
+            return "BEARISH_IMPULSE", "Candle tekanan bearish kuat (momentum seller dominan)"
+
+        # Pullback to EMA zone
+        if ema9 is not None and ema21 is not None:
+            if min(ema9, ema21) - 1.5 <= cl2 <= max(ema9, ema21) + 1.5:
+                return "EMA_PULLBACK", "Harga sedang retest zona dinamis EMA 9/21 (area entry pullback ideal)"
+
+        return "CONSOLIDATION", "Pergerakan kompresi menyempit menunggu ekspansi candle berikutnya"
 
     @staticmethod
     def _determine_trend(
@@ -155,6 +340,7 @@ class TechnicalCalculator:
         sma20: Optional[float],
         sma50: Optional[float],
         rsi: Optional[float],
+        pa_note: str = "",
     ) -> Tuple[str, str]:
         score = 0
         reasons = []
@@ -162,39 +348,42 @@ class TechnicalCalculator:
         if ema9 is not None and ema21 is not None:
             if ema9 > ema21:
                 score += 2
-                reasons.append("EMA 9 berada di atas EMA 21 (golden cross momentum)")
+                reasons.append("EMA 9 di atas EMA 21 (struktur naik)")
             else:
                 score -= 2
-                reasons.append("EMA 9 berada di bawah EMA 21 (death cross momentum)")
+                reasons.append("EMA 9 di bawah EMA 21 (struktur turun)")
 
         if sma20 is not None:
             if price > sma20:
                 score += 1
-                reasons.append("Harga bertahan di atas SMA 20")
+                reasons.append("harga bertahan di atas SMA 20")
             else:
                 score -= 1
-                reasons.append("Harga tertahan di bawah SMA 20")
+                reasons.append("harga tertahan di bawah SMA 20")
 
         if rsi is not None:
-            if 50 < rsi < 70:
+            if 52 <= rsi < 70:
                 score += 1
-                reasons.append(f"RSI {rsi} berada di zona ekspansi bullish sehat")
-            elif 30 < rsi < 50:
+                reasons.append(f"RSI {rsi} di zona momentum bullish")
+            elif 30 < rsi <= 48:
                 score -= 1
-                reasons.append(f"RSI {rsi} berada di zona tekanan bearish")
+                reasons.append(f"RSI {rsi} di zona tekanan bearish")
             elif rsi >= 70:
-                reasons.append(f"RSI {rsi} mendekati area overbought (waspada pullback)")
+                reasons.append(f"RSI {rsi} overbought (waspada pullback)")
             elif rsi <= 30:
-                reasons.append(f"RSI {rsi} mendekati area oversold (peluang technical rebound)")
+                reasons.append(f"RSI {rsi} oversold (potensi pantulan cepat)")
+
+        if pa_note:
+            reasons.append(pa_note)
 
         if score >= 2:
             direction = "BULLISH"
-            summary = "Struktur teknikal cenderung Bullish. " + "; ".join(reasons) + "."
+            summary = "Struktur teknikal Bullish: " + "; ".join(reasons) + "."
         elif score <= -2:
             direction = "BEARISH"
-            summary = "Struktur teknikal cenderung Bearish. " + "; ".join(reasons) + "."
+            summary = "Struktur teknikal Bearish: " + "; ".join(reasons) + "."
         else:
             direction = "SIDEWAYS"
-            summary = "Struktur teknikal berkonsolidasi (Netral/Sideways). " + "; ".join(reasons) + "."
+            summary = "Struktur teknikal Sideways/Range: " + "; ".join(reasons) + "."
 
         return direction, summary

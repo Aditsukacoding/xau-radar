@@ -1,79 +1,70 @@
 import json
 import logging
 import httpx
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """Kamu adalah Senior Institutional Macro & Quantitative Strategist untuk instrumen komoditas & forex (khususnya XAU/USD).
-Kamu TIDAK menebak harga secara acak, melainkan menggunakan METODOLOGI INSTITUSIONAL 9 LANGKAH dengan integritas data mutlak:
+SYSTEM_PROMPT = """Kamu adalah Senior Institutional XAU/USD Direct Scalping & Quantitative Strategist.
+Tugas utamamu: menganalisis data multi-timeframe real-time (M5, M15, H1), ATR volatilitas, struktur swing, sesi pasar aktif, kalender ekonomi, dan sentimen berita untuk menghasilkan SETUP SCALPING SIAP EKSEKUSI (Entry, SL, TP1, TP2, TP3) yang presisi.
 
 ATURAN MUTLAK INTEGRITAS DATA & ZERO-HALLUCINATION:
-1. HARGA AKTIF PASAR: Semua perhitungan level harga (Entry, Stop Loss, TP1, TP2, Support, Resistance) HARUS berpatokan presisi pada `current_price` yang diberikan dalam payload JSON input. JANGAN PERNAH mengarang harga historis (misal harga $1900-$2400 jika harga saat ini $4100+). Mengabaikan harga aktif adalah kesalahan fatal.
-2. HUKUM FISIKA TRADING (TIDAK BOLEH DILANGGAR):
-   - Jika Action = BUY: Stop Loss HARUS LEBIH RENDAH dari Entry (stop_loss < entry_price). TP1 & TP2 HARUS LEBIH TINGGI dari Entry (entry_price < take_profit_1 < take_profit_2).
-   - Jika Action = SELL: Stop Loss HARUS LEBIH TINGGI dari Entry (stop_loss > entry_price). TP1 & TP2 HARUS LEBIH RENDAH dari Entry (take_profit_2 < take_profit_1 < entry_price).
-   - Minimum Risk-to-Reward (R:R) 1 : 1.5. Entry zone harus realistis di sekitar harga aktif (pullback untuk BUY, rally untuk SELL).
-3. PROFIL & GAYA TRADING USER (MUTLAK DISESUAIKAN):
-   - STOP LOSS: Selalu targetkan di kisaran ~50 pips ($5.00 pada XAUUSD, toleransi 45-55 pips disesuaikan dengan swing low/high terdekat).
-   - ZONA ENTRY: Lebar zona entry HARUS KETAT dan realistis, maksimal 15 - 20 pips ($1.50 - $2.00 dari titik acuan) di sekitar harga aktif.
-     * Untuk BUY: Zona entry di sekitar harga aktif atau pullback kecil (misal $4171.00 - $4173.00). SL WAJIB berada di bawah seluruh zona entry.
-     * Untuk SELL: Zona entry di sekitar harga aktif atau rally kecil (misal $4171.00 - $4173.00). SL WAJIB berada di atas seluruh zona entry.
-     * JANGAN PERNAH membuat rentang zona entry puluhan dolar atau bertabrakan dengan Stop Loss / Take Profit!
-   - TAKE PROFIT 1 (TP1): Kisaran 30 - 50 pips ($3.00 - $5.00) untuk mengunci profit pertama 50% dan memicu geser SL ke Breakeven (BEP).
-   - TAKE PROFIT 2 (TP2 - RUNNER / NGEHOLD): Kisaran 80 - 100+ pips ($8.00 - $12.00+) untuk memaksimalkan swing hold.
-   - Rasional Wajib: Jelaskan rencana eksekusi: amankan 50% posisi di TP1 (30-50 pips), geser SL ke Breakeven (BEP), dan tahan sisa posisi (ngehold) menuju target ekspansif TP2 (80-100+ pips).
-4. BAHASA & STRUKTUR:
-   - Gunakan Bahasa Indonesia yang santai tapi rapi, profesional, berbasis data nyata, tidak bertele-tele, dan terarah.
-   - Tulis setiap field secara padat dan tajam (maksimal 2 kalimat per field ringkasan).
+1. HARGA AKTIF PASAR: Seluruh angka harga (Entry, SL, TP1, TP2, TP3, Support, Resistance) WAJIB berpatokan langsung pada `current_price` di JSON input. JANGAN PERNAH memakai harga lama/halusinasi.
+2. HUKUM FISIKA TRADING (WAJIB 100% VALID):
+   - BUY: `stop_loss < entry_low <= entry_price <= entry_high < take_profit_1 < take_profit_2 < take_profit_3`
+   - SELL: `stop_loss > entry_high >= entry_price >= entry_low > take_profit_1 > take_profit_2 > take_profit_3`
+3. STRATEGI DIRECT SCALPING XAU/USD (BERBASIS ATR & STRUKTUR SWING M5/M15):
+   - Prioritaskan setup **DIRECT SCALPING** (`BUY` atau `SELL` dengan `execution_type: "INSTANT"` jika harga sudah di area eksekusi atau `"LIMIT"` jika pullback tipis 5–18 pips).
+   - JANGAN malas memberikan `WAIT` ketika harga berada di range intraday lebar! Dalam kondisi sideways/range, manfaatkan rejection Support/Resistance M15 atau momentum EMA M5 untuk scalping terarah.
+   - Hanya gunakan `WAIT` jika ada rilis berita HIGH-IMPACT USD (NFP/CPI/FOMC/PCE) kurang dari 15 menit lagi.
+   - **ZONA ENTRY KETAT**: Lebar maksimal 10–20 pips ($1.00–$2.00) di dekat `current_price` agar langsung bisa dieksekusi scalper.
+   - **STOP LOSS (SL) DINAMIS BERBASIS ATR & SWING**:
+     * Letakkan di balik swing low/high M5–M15 terdekat + buffer tipis, disesuaikan dengan `atr_14` M15 saat ini (kisaran ideal 25–65 pips / $2.50–$6.50 tergantung sesi Asia vs London/NY Killzone).
+     * Jangan terlalu sempit (< 20 pips rentan sweep) dan jangan terlalu lebar (> 75 pips untuk scalping).
+   - **3-TIER TAKE PROFIT SCALING (WAJIB LENGKAP TP1, TP2, TP3)**:
+     * **TP1 (Quick Scalp — Amankan 40% Lot)**: Target cepat ~0.9x–1.2x jarak SL (25–50 pips) di likuiditas minor terdekat → langsung geser SL ke Breakeven (BEP).
+     * **TP2 (Main Intraday Target — Amankan 40% Lot)**: Target struktur utama ~1.8x–2.3x jarak SL (55–100 pips) di area S/R M15/H1 → geser SL ke TP1 (Profit Locked).
+     * **TP3 (Extended Runner — Tahan 20% Lot)**: Target ekspansi impuls ~2.8x–3.8x jarak SL (95–170 pips) di zona likuiditas major H1 untuk memaksimalkan trend continuation.
+4. BAHASA & RINGKASAN:
+   - Gunakan Bahasa Indonesia profesional, lugas, taktis, langsung ke poin eksekusi (maksimal 2–3 kalimat padat per bagian).
 
-METODOLOGI 9 LANGKAH:
-1. APA YANG DINANTI PASAR: Catat agenda kalender ekonomi, konsensus, dan rilis sebelumnya. Fokus pada DEVIASI angka aktual vs ekspektasi yang sudah priced-in.
-2. REZIM PASAR (MARKET REGIME): Kenali rezim dominan (inflasi energi, pelonggaran suku bunga, flight-to-safety, atau likuiditas).
-3. DATA FUNDAMENTAL: Kebijakan suku bunga Fed, inflasi (CPI/PCE), tenaga kerja (NFP/Claims), dan kurva Yield US10Y serta DXY.
-4. TRANSMISI GEOPOLITIK: Dampak ke harga minyak mentah -> inflasi -> yield/dolar -> pengaruh ke daya tarik emas.
-5. POSITIONING & SENTIMEN: Risiko crowded trade (posisi spekulan long vs short).
-6. TEKNIKAL MULTI-TIMEFRAME: H4 (bias & zona besar), M30 (struktur pasar), M5 (konfirmasi reaksi).
-7. SKENARIO TERUKUR: Proyeksikan skenario jika deviasi data kuat, sesuai konsensus, atau lemah.
-8. SINTESIS & CONFIDENCE SCORE: Ukur keselarasan 4 pilar fundamental-geopolitik-positioning-teknikal (0-100%).
-9. KATALIS TERTUNDA: Petakan agenda rilis mendatang sebagai pengingat bahwa analisis bersifat dinamis.
-
-OUTPUT HARUS BERUPA JSON VALID TANPA MARKDOWN WRAPPER:
+OUTPUT HARUS BERUPA JSON VALID MURNI TANPA MARKDOWN WRAPPER:
 {
   "bias": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "confidence_score": integer (50-95),
-  "summary": "Ringkasan kesimpulan bias 2 kalimat yang mengintegrasikan rezim pasar dan ekspektasi konsensus",
-  "fundamental_notes": "Analisis kebijakan Fed, deviasi inflasi/tenaga kerja, serta arah Yield US10Y & DXY",
-  "geopolitical_notes": "Analisis geopolitik melalui jalur transmisi dampak harga minyak dan sentimen safe-haven",
-  "technical_notes": "Analisis multi-timeframe H4-M30-M5, posisi supply/demand, dan reaksi di chart TradingView",
+  "confidence_score": integer (55-95),
+  "summary": "Ringkasan bias 2 kalimat yang menyatukan struktur M5/M15/H1, sesi aktif, dan sentimen makro/geopolitik.",
+  "fundamental_notes": "Dampak agenda kalender ekonomi terdekat, suku bunga Fed, Yield US10Y & DXY.",
+  "geopolitical_notes": "Dampak sentimen berita global & safe-haven terkini ke permintaan emas.",
+  "technical_notes": "Analisis sinkronisasi H1 (bias) + M15 (struktur & ATR) + M5 (trigger entry & price action).",
   "key_levels": {
     "support": [number, number],
     "resistance": [number, number]
   },
   "trade_setup": {
     "action": "BUY" | "SELL" | "WAIT",
-    "action_label": "BUY (LONG) ON PULLBACK" | "SELL (SHORT) ON RALLY" | "WAIT / STANDBY",
-    "entry_zone": "$4200.00 - $4204.00",
-    "entry_price": 4202.00,
-    "stop_loss": 4197.00,
-    "take_profit_1": 4206.00,
-    "take_profit_2": 4211.50,
-    "risk_reward_ratio": "1 : 1.9",
-    "risk_pips": 50.0,
-    "reward_tp1_pips": 40.0,
-    "reward_tp2_pips": 95.0,
-    "technical_rationale": "Setup disesuaikan profil trader: Pasang SL 50 pips ($4197.00). Kunci profit 50% lot di TP1 +40 pips ($4206.00) dan geser SL ke BEP (Breakeven). Tahan (hold) sisa posisi menuju swing TP2 +95 pips ($4211.50).",
-    "invalidation_level": "Level harga persis yang membatalkan skenario ini bila ditembus"
+    "action_label": "BUY NOW (SCALP)" | "BUY LIMIT (PULLBACK)" | "SELL NOW (SCALP)" | "SELL LIMIT (RALLY)" | "WAIT / NEWS GUARD",
+    "execution_type": "INSTANT" | "LIMIT" | "WAIT",
+    "scalp_timeframe": "M5 / M15",
+    "entry_zone": "$3562.50 - $3564.20",
+    "entry_price": 3563.50,
+    "stop_loss": 3559.70,
+    "take_profit_1": 3567.30,
+    "take_profit_2": 3571.50,
+    "take_profit_3": 3576.50,
+    "lot_management": "40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3",
+    "technical_rationale": "Alasan spesifik berbasis struktur M5/M15, EMA/RSI, ATR, dan rencana scaling TP1-TP2-TP3.",
+    "invalidation_level": "Close candle M15 di bawah $3559.70 membatalkan setup buy scalp ini."
   },
   "risk_factors": [
-    "Faktor risiko 1 yang dapat membatalkan bias",
+    "Faktor risiko 1",
     "Faktor risiko 2"
   ],
   "sources": [
+    "Multi-Timeframe Price Action (M5, M15, H1) & ATR(14)",
     "Kalender Ekonomi ForexFactory",
-    "Chart Teknikal TradingView & Indikator H1",
-    "Arus Berita Geopolitik & Makro Global"
+    "Arus Berita Global & Geopolitik XAU/USD"
   ]
 }
 """
@@ -87,32 +78,77 @@ class AIAgentEngine:
         technical_data: Dict[str, Any],
         economic_events: List[Dict[str, Any]],
         news_articles: List[Dict[str, Any]],
+        mtf_technical: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Synthesizes 3-pillar market data using Claude API, Gemini API, or intelligent heuristic fallback,
-        followed by a mandatory programmatic validation and sanitization layer.
+        Synthesizes multi-timeframe scalping + 3-pillar data using:
+        1. Anthropic Claude API (Sonnet 4.5 / Haiku 4.5) when valid ANTHROPIC_API_KEY is configured
+        2. Gemini API (if configured)
+        3. OpenRouter AI Gateway (if configured)
+        4. Built-in ATR & Multi-Timeframe Quantitative Direct Scalping Engine
+        Always followed by a smart non-destructive physics & pip sanitizer.
         """
-        curr_price = float(price_snapshot.get("current_price", 4198.50))
+        curr_price = float(price_snapshot.get("current_price", 0.0) or technical_data.get("latest_price", 3560.0))
+        m15_tech = (mtf_technical or {}).get("15m") or technical_data
+        m5_tech = (mtf_technical or {}).get("5m") or m15_tech
+        h1_tech = (mtf_technical or {}).get("1h") or technical_data
+
         payload_data = {
             "symbol": symbol,
             "current_price": curr_price,
-            "technical": technical_data,
+            "session": m15_tech.get("session_name", "Global Session"),
+            "session_volatility": m15_tech.get("session_volatility", "MEDIUM"),
+            "mtf_technical": {
+                "m5_execution": {
+                    "trend": m5_tech.get("trend_direction"),
+                    "rsi_14": m5_tech.get("rsi_14"),
+                    "ema_9": m5_tech.get("ema_9"),
+                    "ema_21": m5_tech.get("ema_21"),
+                    "atr_14": m5_tech.get("atr_14"),
+                    "price_action": m5_tech.get("price_action"),
+                    "price_action_note": m5_tech.get("price_action_note"),
+                },
+                "m15_scalp_structure": {
+                    "trend": m15_tech.get("trend_direction"),
+                    "rsi_14": m15_tech.get("rsi_14"),
+                    "ema_9": m15_tech.get("ema_9"),
+                    "ema_21": m15_tech.get("ema_21"),
+                    "atr_14": m15_tech.get("atr_14"),
+                    "atr_pips": m15_tech.get("atr_pips"),
+                    "swing_lows": m15_tech.get("swing_lows", []),
+                    "swing_highs": m15_tech.get("swing_highs", []),
+                    "supports": m15_tech.get("support_levels", []),
+                    "resistances": m15_tech.get("resistance_levels", []),
+                    "price_action": m15_tech.get("price_action"),
+                },
+                "h1_macro_bias": {
+                    "trend": h1_tech.get("trend_direction"),
+                    "rsi_14": h1_tech.get("rsi_14"),
+                    "sma_20": h1_tech.get("sma_20"),
+                    "sma_50": h1_tech.get("sma_50"),
+                    "atr_14": h1_tech.get("atr_14"),
+                    "supports": h1_tech.get("support_levels", []),
+                    "resistances": h1_tech.get("resistance_levels", []),
+                },
+            },
             "upcoming_economic_events": economic_events[:4],
             "recent_news_sentiment": news_articles[:4],
         }
 
-        # 1. Try Anthropic Claude API if key exists
-        if settings.ANTHROPIC_API_KEY:
+        # 1. Try Anthropic Claude API if valid key exists
+        if settings.ANTHROPIC_API_KEY and not settings.ANTHROPIC_API_KEY.startswith("your-"):
             try:
                 raw_claude = await AIAgentEngine._call_claude_api(payload_data)
                 sanitized = AIAgentEngine._sanitize_and_validate_trade_setup(
                     raw_claude,
                     curr_price=curr_price,
-                    technical_data=technical_data,
+                    technical_data=h1_tech,
+                    m15_data=m15_tech,
+                    m5_data=m5_tech,
                     economic_events=economic_events,
-                    news_articles=news_articles
+                    news_articles=news_articles,
                 )
-                logger.info("[AIAgentEngine] Claude analysis successfully synthesized and sanitized!")
+                logger.info("[AIAgentEngine] Claude scalping analysis synthesized & validated!")
                 return sanitized
             except Exception as e:
                 logger.warning(f"Claude API failed, falling back: {e}")
@@ -124,39 +160,53 @@ class AIAgentEngine:
                 sanitized = AIAgentEngine._sanitize_and_validate_trade_setup(
                     raw_gemini,
                     curr_price=curr_price,
-                    technical_data=technical_data,
+                    technical_data=h1_tech,
+                    m15_data=m15_tech,
+                    m5_data=m5_tech,
                     economic_events=economic_events,
-                    news_articles=news_articles
+                    news_articles=news_articles,
                 )
-                logger.info("[AIAgentEngine] Gemini analysis successfully synthesized and sanitized!")
+                logger.info("[AIAgentEngine] Gemini scalping analysis synthesized & validated!")
                 return sanitized
             except Exception as e:
                 logger.warning(f"Gemini API failed, trying OpenRouter fallback: {e}")
 
-        # 3. Try OpenRouter API (FREE — 200+ models, same key as portfolio chatbot)
+        # 3. Try OpenRouter API if key exists
         if settings.OPENROUTER_API_KEY:
             try:
                 raw_openrouter = await AIAgentEngine._call_openrouter_api(payload_data)
                 sanitized = AIAgentEngine._sanitize_and_validate_trade_setup(
                     raw_openrouter,
                     curr_price=curr_price,
-                    technical_data=technical_data,
+                    technical_data=h1_tech,
+                    m15_data=m15_tech,
+                    m5_data=m5_tech,
                     economic_events=economic_events,
-                    news_articles=news_articles
+                    news_articles=news_articles,
                 )
-                logger.info("[AIAgentEngine] OpenRouter analysis successfully synthesized and sanitized!")
+                logger.info("[AIAgentEngine] OpenRouter scalping analysis synthesized & validated!")
                 return sanitized
             except Exception as e:
-                logger.warning(f"OpenRouter API failed, falling back to heuristic: {e}")
+                logger.warning(f"OpenRouter API failed, falling back to quantitative scalping engine: {e}")
 
-        # 4. Built-in Quantitative Heuristic Synthesizer (Zero-cost, works offline)
-        raw_heuristic = AIAgentEngine._heuristic_synthesis(symbol, price_snapshot, technical_data, economic_events, news_articles)
+        # 4. Built-in Multi-Timeframe ATR Quantitative Direct Scalping Engine (Zero-cost, sub-10ms)
+        raw_heuristic = AIAgentEngine._heuristic_synthesis(
+            symbol=symbol,
+            price_snapshot=price_snapshot,
+            technical_data=h1_tech,
+            economic_events=economic_events,
+            news_articles=news_articles,
+            m15_data=m15_tech,
+            m5_data=m5_tech,
+        )
         return AIAgentEngine._sanitize_and_validate_trade_setup(
             raw_heuristic,
             curr_price=curr_price,
-            technical_data=technical_data,
+            technical_data=h1_tech,
+            m15_data=m15_tech,
+            m5_data=m5_tech,
             economic_events=economic_events,
-            news_articles=news_articles
+            news_articles=news_articles,
         )
 
     @staticmethod
@@ -167,41 +217,49 @@ class AIAgentEngine:
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         }
+        # Claude Sonnet 4.5 first for sharp multi-timeframe reasoning, Haiku 4.5 as fast fallback
         models = [
-            "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
+            "claude-haiku-4-5-20251001",
         ]
         last_error = None
         for model in models:
             body = {
                 "model": model,
-                "max_tokens": 4096,
+                "max_tokens": 2048,
+                "temperature": 0.2,
                 "system": SYSTEM_PROMPT,
                 "messages": [
                     {
                         "role": "user",
-                        "content": f"Analisis data pasar berikut dan berikan kesimpulan bias dalam format JSON:\n{json.dumps(data, default=str)}"
+                        "content": (
+                            "Analisis data multi-timeframe XAU/USD berikut dan hasilkan setup DIRECT SCALPING "
+                            "(Entry, SL, TP1, TP2, TP3) dalam format JSON valid:\n"
+                            f"{json.dumps(data, default=str)}"
+                        ),
                     }
-                ]
+                ],
             }
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with httpx.AsyncClient(timeout=12.0) as client:
                     resp = await client.post(url, json=body, headers=headers)
                     if resp.status_code == 200:
                         res_json = resp.json()
                         content_text = res_json["content"][0]["text"].strip()
                         s_idx = content_text.find("{")
                         e_idx = content_text.rfind("}")
-                        if s_idx != -1 and e_idx != -1 and e_idx > s_idx:
-                            clean_json = content_text[s_idx:e_idx + 1]
-                        else:
-                            clean_json = content_text
+                        clean_json = content_text[s_idx:e_idx + 1] if (s_idx != -1 and e_idx > s_idx) else content_text
                         parsed = json.loads(clean_json)
-                        logger.info(f"[AIAgentEngine] Anthropic {model} analysis successfully synthesized!")
+                        logger.info(f"[AIAgentEngine] Anthropic {model} scalping analysis synthesized!")
                         return parsed
+                    elif resp.status_code == 401:
+                        # Don't waste time retrying another model if API key itself is invalid
+                        raise RuntimeError(f"Anthropic HTTP 401 invalid API key")
                     else:
-                        last_error = resp.text
-                        logger.warning(f"Claude {model} returned status {resp.status_code}: {resp.text}")
+                        last_error = f"HTTP {resp.status_code}: {resp.text[:180]}"
+                        logger.warning(f"Claude {model} returned {last_error}")
+            except RuntimeError:
+                raise
             except Exception as e:
                 last_error = e
                 logger.warning(f"Claude {model} call error: {e}")
@@ -210,8 +268,7 @@ class AIAgentEngine:
 
     @staticmethod
     async def _call_gemini_api(data: Dict[str, Any]) -> Dict[str, Any]:
-        # Try gemini-1.5-flash first, then gemini-2.0-flash as fallback
-        models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
+        models = ["gemini-2.0-flash", "gemini-1.5-flash"]
         last_error = None
 
         for model in models:
@@ -221,17 +278,17 @@ class AIAgentEngine:
                     {
                         "parts": [
                             {"text": SYSTEM_PROMPT},
-                            {"text": f"Analisis data pasar berikut dan hasilkan JSON:\n{json.dumps(data, default=str)}"}
+                            {"text": f"Analisis data multi-timeframe XAU/USD berikut dan hasilkan JSON scalping:\n{json.dumps(data, default=str)}"},
                         ]
                     }
                 ],
                 "generationConfig": {
                     "response_mime_type": "application/json",
-                    "temperature": 0.2
-                }
+                    "temperature": 0.2,
+                },
             }
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.post(url, json=body)
                     if resp.status_code == 200:
                         res_json = resp.json()
@@ -240,17 +297,13 @@ class AIAgentEngine:
                             parts = candidates[0]["content"].get("parts", [])
                             if parts and "text" in parts[0]:
                                 content_text = parts[0]["text"].strip()
-                                if content_text.startswith("```json"):
-                                    content_text = content_text[7:]
-                                elif content_text.startswith("```"):
-                                    content_text = content_text[3:]
-                                if content_text.endswith("```"):
-                                    content_text = content_text[:-3]
-                                parsed = json.loads(content_text.strip())
-                                logger.info(f"[AIAgentEngine] Google {model} analysis successfully synthesized!")
-                                return parsed
+                                s_idx = content_text.find("{")
+                                e_idx = content_text.rfind("}")
+                                if s_idx != -1 and e_idx > s_idx:
+                                    content_text = content_text[s_idx:e_idx + 1]
+                                return json.loads(content_text.strip())
                     else:
-                        last_error = f"{model} returned HTTP {resp.status_code}: {resp.text[:150]}"
+                        last_error = f"{model} HTTP {resp.status_code}"
             except Exception as e:
                 last_error = str(e)
                 continue
@@ -259,25 +312,17 @@ class AIAgentEngine:
 
     @staticmethod
     async def _call_openrouter_api(data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Calls OpenRouter.ai — a free-tier gateway to 200+ LLMs (Qwen, Gemma, Mistral, etc.).
-        Uses the same OPENROUTER_API_KEY as the portfolio chatbot (sk-or-v1-...).
-        Tries multiple free models in sequence as an internal fallback chain.
-        """
         url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
             "HTTP-Referer": "https://xauusd-radar.app",
-            "X-Title": "XAU/USD RADAR — Institutional Bias Engine",
+            "X-Title": "XAUUSD RADAR - Institutional Scalping Engine",
         }
-        # Free model priority order: fastest & highest reliability first
         free_models = [
-            "qwen/qwen3.8-27b:free",                   # Qwen 3.8 27B — ultra fast & solid reasoning
-            "google/gemma-4-26b-a4b-it:free",          # Google Gemma 4 26B MoE — lightweight
-            "google/gemma-4-31b-it:free",              # Google Gemma 4 31B
-            "nvidia/nemotron-3-super-120b-a12b:free",  # Nvidia Nemotron 120B
-            "nvidia/nemotron-3-ultra-550b-a55b:free",  # 550B param
+            "qwen/qwen3.8-27b:free",
+            "google/gemma-4-26b-a4b-it:free",
+            "google/gemma-4-31b-it:free",
         ]
         last_error: Any = None
         for model in free_models:
@@ -289,8 +334,9 @@ class AIAgentEngine:
                         {
                             "role": "user",
                             "content": (
-                                f"Analisis data pasar berikut dan berikan kesimpulan bias "
-                                f"dalam format JSON yang valid:\n{json.dumps(data, default=str)}"
+                                "Analisis data multi-timeframe XAU/USD berikut dan hasilkan setup DIRECT SCALPING "
+                                "(Entry, SL, TP1, TP2, TP3) dalam format JSON valid:\n"
+                                f"{json.dumps(data, default=str)}"
                             ),
                         },
                     ],
@@ -298,39 +344,54 @@ class AIAgentEngine:
                     "temperature": 0.2,
                     "response_format": {"type": "json_object"},
                 }
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with httpx.AsyncClient(timeout=10.0) as client:
                     resp = await client.post(url, json=body, headers=headers)
                     if resp.status_code == 200:
                         res_json = resp.json()
                         content_text = res_json.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                         if not content_text:
-                            logger.warning(f"[OpenRouter] {model} returned empty content.")
                             continue
-                        # Extract JSON block robustly
-                        if content_text.startswith("```json"):
-                            content_text = content_text[7:]
-                        elif content_text.startswith("```"):
-                            content_text = content_text[3:]
-                        if content_text.endswith("```"):
-                            content_text = content_text[:-3]
                         s_idx = content_text.find("{")
                         e_idx = content_text.rfind("}")
-                        if s_idx != -1 and e_idx != -1 and e_idx > s_idx:
+                        if s_idx != -1 and e_idx > s_idx:
                             content_text = content_text[s_idx:e_idx + 1]
                         parsed = json.loads(content_text.strip())
-                        logger.info(f"[AIAgentEngine] OpenRouter/{model} analysis synthesized!")
+                        logger.info(f"[AIAgentEngine] OpenRouter/{model} scalping analysis synthesized!")
                         return parsed
+                    elif resp.status_code == 401:
+                        raise RuntimeError("OpenRouter HTTP 401 invalid key")
                     else:
-                        last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
-                        logger.warning(f"[OpenRouter] {model} returned {resp.status_code}")
-            except json.JSONDecodeError as e:
-                last_error = f"JSON parse error: {e}"
-                logger.warning(f"[OpenRouter] {model} JSON parse failed: {e}")
+                        last_error = f"HTTP {resp.status_code}"
+            except RuntimeError:
+                raise
             except Exception as e:
                 last_error = str(e)
-                logger.warning(f"[OpenRouter] {model} call error: {e}")
 
         raise RuntimeError(f"All OpenRouter models failed. Last error: {last_error}")
+
+    @staticmethod
+    def _has_imminent_high_impact_event(economic_events: List[Dict[str, Any]], minutes_window: int = 15) -> Optional[str]:
+        """Returns event title if a HIGH impact USD news release occurs within minutes_window."""
+        now = datetime.now(timezone.utc)
+        for ev in economic_events or []:
+            if str(ev.get("impact_level", "")).upper() != "HIGH":
+                continue
+            sched_raw = ev.get("scheduled_at")
+            if not sched_raw:
+                continue
+            try:
+                if isinstance(sched_raw, datetime):
+                    sched = sched_raw
+                else:
+                    sched = datetime.fromisoformat(str(sched_raw).replace("Z", "+00:00"))
+                if sched.tzinfo is None:
+                    sched = sched.replace(tzinfo=timezone.utc)
+                diff_min = (sched - now).total_seconds() / 60.0
+                if -5.0 <= diff_min <= float(minutes_window):
+                    return str(ev.get("event_title", "High-Impact USD News"))
+            except Exception:
+                continue
+        return None
 
     @staticmethod
     def _heuristic_synthesis(
@@ -339,75 +400,108 @@ class AIAgentEngine:
         technical_data: Dict[str, Any],
         economic_events: List[Dict[str, Any]],
         news_articles: List[Dict[str, Any]],
+        m15_data: Optional[Dict[str, Any]] = None,
+        m5_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Deterministic, rule-based quantitative synthesizer that mimics LLM output format.
-        Combines Fundamental (35%), Geopolitical (30%), and Technical (35%) scores.
+        Quantitative Multi-Timeframe (H1 + M15 + M5) ATR-Calibrated Direct Scalping Synthesizer.
+        Combines Macro Fundamental (25%), Geopolitics (20%), H1 Structure (25%), and M15/M5 Execution Momentum (30%).
         """
-        curr_price = price_snapshot.get("current_price", 2378.0)
+        curr_price = float(price_snapshot.get("current_price", 0.0) or technical_data.get("latest_price", 3560.0))
+        m15 = m15_data or technical_data
+        m5 = m5_data or m15
 
-        # 1. Technical Score (-1.0 to 1.0)
-        tech_dir = technical_data.get("trend_direction", "SIDEWAYS")
-        tech_score = 0.8 if tech_dir == "BULLISH" else (-0.8 if tech_dir == "BEARISH" else 0.0)
+        # 1. Multi-Timeframe Technical Score (-1.0 to +1.0)
+        def dir_to_score(d: str) -> float:
+            u = str(d or "").upper()
+            return 0.85 if u == "BULLISH" else (-0.85 if u == "BEARISH" else 0.0)
+
+        h1_score = dir_to_score(technical_data.get("trend_direction", "SIDEWAYS"))
+        m15_score = dir_to_score(m15.get("trend_direction", "SIDEWAYS"))
+        m5_score = dir_to_score(m5.get("trend_direction", "SIDEWAYS"))
+
+        # Add Price Action micro-trigger nudge on M5/M15
+        pa = str(m5.get("price_action") or m15.get("price_action") or "").upper()
+        pa_boost = 0.0
+        if pa in ("BULLISH_REJECTION", "BULLISH_ENGULFING", "BULLISH_IMPULSE"):
+            pa_boost = 0.30
+        elif pa in ("BEARISH_REJECTION", "BEARISH_ENGULFING", "BEARISH_IMPULSE"):
+            pa_boost = -0.30
+
+        # Add RSI oversold/overbought scalping mean-reversion edge
+        m15_rsi = m15.get("rsi_14")
+        rsi_edge = 0.0
+        if isinstance(m15_rsi, (int, float)):
+            if m15_rsi <= 34:
+                rsi_edge = 0.35
+            elif m15_rsi >= 66:
+                rsi_edge = -0.35
+            elif 52 <= m15_rsi < 66:
+                rsi_edge = 0.15
+            elif 34 < m15_rsi <= 48:
+                rsi_edge = -0.15
+
+        tech_score = max(-1.0, min(1.0, (h1_score * 0.40) + (m15_score * 0.35) + (m5_score * 0.25) + pa_boost + rsi_edge))
 
         # 2. Geopolitical Sentiment Score (-1.0 to 1.0)
-        news_scores = [n.get("sentiment_score", 0.0) for n in news_articles]
+        news_scores = [float(n.get("sentiment_score", 0.0) or 0.0) for n in news_articles]
         geo_score = sum(news_scores) / len(news_scores) if news_scores else 0.0
 
         # 3. Fundamental Score (-1.0 to 1.0)
-        # Gold tends to be Bullish when US data is weak or Fed is dovish
-        fund_score = 0.5  # default moderately bullish bias due to rate cut expectations
+        fund_score = 0.15
         for event in economic_events:
-            impact = event.get("sentiment_impact", "")
+            impact = str(event.get("sentiment_impact", "") or "").upper()
             if "BULLISH_GOLD" in impact or "BEARISH_USD" in impact:
-                fund_score += 0.2
+                fund_score += 0.25
             elif "BEARISH_GOLD" in impact or "BULLISH_USD" in impact:
-                fund_score -= 0.2
+                fund_score -= 0.25
         fund_score = max(-1.0, min(1.0, fund_score))
 
-        # Weighted Total Score: -1.0 (Strong Bearish) to +1.0 (Strong Bullish)
-        composite_score = (fund_score * 0.35) + (geo_score * 0.30) + (tech_score * 0.35)
+        # Weighted Composite Score
+        composite_score = (tech_score * 0.55) + (fund_score * 0.25) + (geo_score * 0.20)
 
-        if composite_score > 0.25:
+        # Range Edge Proximity Bonus (for direct scalping even in sideways markets)
+        supports = m15.get("support_levels") or technical_data.get("support_levels") or [round(curr_price - 8.0, 2)]
+        resistances = m15.get("resistance_levels") or technical_data.get("resistance_levels") or [round(curr_price + 8.0, 2)]
+        nearest_sup = max([s for s in supports if s < curr_price], default=round(curr_price - 8.0, 2))
+        nearest_res = min([r for r in resistances if r > curr_price], default=round(curr_price + 8.0, 2))
+        dist_sup = curr_price - nearest_sup
+        dist_res = nearest_res - curr_price
+
+        # If price is tightly hugging Support or Resistance, tilt scalping direction cleanly
+        if abs(composite_score) < 0.18:
+            if dist_sup < dist_res * 0.65 and dist_sup <= 8.0:
+                composite_score += 0.24  # Bounce scalp off Support
+            elif dist_res < dist_sup * 0.65 and dist_res <= 8.0:
+                composite_score -= 0.24  # Rejection scalp off Resistance
+
+        session_name = m15.get("session_name", "Global Session")
+
+        if composite_score >= 0.12:
             bias = "BULLISH"
-            confidence = int(60 + (composite_score * 35))
+            confidence = int(64 + min(30, abs(composite_score) * 32))
             summary = (
-                f"Pasar {symbol} menunjukkan bias Bullish kuat yang didorong oleh sinyal teknikal ekspansif "
-                f"serta sentimen safe-haven geopolitik global yang solid."
+                f"Struktur {symbol} pada {session_name} mengonfirmasi peluang BUY Scalp "
+                f"dengan dukungan momentum M5/M15 dan reaksi demand di atas Support ${nearest_sup:.2f}."
             )
-        elif composite_score < -0.25:
+        elif composite_score <= -0.12:
             bias = "BEARISH"
-            confidence = int(60 + (abs(composite_score) * 35))
+            confidence = int(64 + min(30, abs(composite_score) * 32))
             summary = (
-                f"Pasar {symbol} condong ke bias Bearish akibat tekanan penguatan Dolar dan "
-                f"penolakan harga di zona resistance teknikal utama."
+                f"Struktur {symbol} pada {session_name} mengonfirmasi peluang SELL Scalp "
+                f"akibat tekanan supply di bawah Resistance ${nearest_res:.2f} dan momentum bearish M5/M15."
             )
         else:
-            bias = "NEUTRAL"
-            confidence = int(50 + (abs(composite_score) * 20))
+            # Break tie cleanly using M5 momentum or range proximity so scalpers get an actionable bias
+            bias = "BULLISH" if (dist_sup <= dist_res) else "BEARISH"
+            confidence = 60
             summary = (
-                f"Pasar {symbol} berada dalam fase konsolidasi (Netral). Pelaku pasar bersikap wait-and-see "
-                f"menjelang rilis agenda kalender ekonomi high-impact terdekat."
+                f"Pasar {symbol} berkonsolidasi dalam range ${nearest_sup:.2f}–${nearest_res:.2f} ({session_name}); "
+                f"setup scalping taktis diarahkan mengikuti sisi {bias} terdekat dengan kontrol risiko ketat."
             )
 
-        confidence = max(50, min(95, confidence))
+        confidence = max(55, min(94, confidence))
 
-        supports = technical_data.get("support_levels", [round(curr_price * 0.99, 2)])
-        resistances = technical_data.get("resistance_levels", [round(curr_price * 1.01, 2)])
-
-        sources = []
-        if economic_events:
-            sources.append(f"Kalender Ekonomi: {economic_events[0].get('event_title', 'Data Rilis')}")
-        if news_articles:
-            sources.append(f"Berita Global: {news_articles[0].get('title', 'Headline Terkini')[:50]}...")
-        sources.append("Struktur Grafik Harga & Indikator Moving Average/RSI")
-
-        risks = [
-            "Volatilitas ekstrem pasca rilis berita high impact (NFP / CPI) berpotensi membalikkan struktur harga",
-            f"Penembusan batas teknikal di bawah Support ${supports[0] if supports else 'kunci'}"
-        ]
-
-        # Calculate exact entry, SL, TP1, and TP2 from chart & high-impact news
         trade_setup = AIAgentEngine._generate_trade_setup(
             symbol=symbol,
             curr_price=curr_price,
@@ -415,25 +509,45 @@ class AIAgentEngine:
             supports=supports,
             resistances=resistances,
             technical_data=technical_data,
+            m15_data=m15,
+            m5_data=m5,
             economic_events=economic_events,
             news_articles=news_articles,
         )
+
+        sources = [
+            f"Multi-Timeframe Price Action M5/M15/H1 & ATR(14) {m15.get('atr_pips', 35.0)} pips",
+            f"Sesi Pasar Aktif: {session_name}",
+        ]
+        if economic_events:
+            sources.append(f"Kalender Ekonomi: {economic_events[0].get('event_title', 'Agenda Makro')}")
+        if news_articles:
+            sources.append(f"Berita Global: {news_articles[0].get('title', 'Headline')[:55]}")
+
+        risks = [
+            "Lonjakan spread & whipsaw saat rilis data ekonomi High-Impact AS (NFP/CPI/PCE/FOMC).",
+            f"Penembusan candle M15 melewati batas invalidasi ${trade_setup['stop_loss']:.2f} membatalkan setup.",
+        ]
 
         return {
             "bias": bias,
             "confidence_score": confidence,
             "summary": summary,
             "fundamental_notes": (
-                "Ekspektasi kebijakan suku bunga AS dan agenda kalender ekonomi mendatang "
-                "menjadi penggerak utama sentimen pasar jangka menengah."
+                "Ekspektasi kebijakan suku bunga The Fed, imbal hasil Treasury AS, serta agenda kalender "
+                "ekonomi terdekat membentuk sentimen dasar XAU/USD."
             ),
             "geopolitical_notes": (
-                "Kekhawatiran rantai pasok global dan tensi geopolitik mempertahankan minat likuiditas pada safe haven."
+                "Dinamika geopolitik global dan aliran aset safe-haven tetap menjadi penopang volatilitas intraday emas."
             ),
-            "technical_notes": technical_data.get("summary", "Indikator teknikal mengindikasikan momentum seimbang."),
+            "technical_notes": (
+                f"H1: {technical_data.get('trend_direction', 'SIDEWAYS')} | "
+                f"M15: {m15.get('trend_direction', 'SIDEWAYS')} (ATR {m15.get('atr_pips', 35.0)} pips, RSI {m15.get('rsi_14', '-')}) | "
+                f"M5: {m5.get('price_action_note', m5.get('trend_direction', 'ACTIVE'))}."
+            ),
             "key_levels": {
-                "support": supports,
-                "resistance": resistances,
+                "support": supports[:2],
+                "resistance": resistances[:2],
             },
             "trade_setup": trade_setup,
             "risk_factors": risks,
@@ -448,128 +562,217 @@ class AIAgentEngine:
         supports: List[float],
         resistances: List[float],
         technical_data: Dict[str, Any],
-        economic_events: List[Dict[str, Any]],
-        news_articles: List[Dict[str, Any]],
+        m15_data: Optional[Dict[str, Any]] = None,
+        m5_data: Optional[Dict[str, Any]] = None,
+        economic_events: Optional[List[Dict[str, Any]]] = None,
+        news_articles: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
-        Synthesizes technical chart structure (Support/Resistance, SMA 20/50, RSI)
-        and high-impact event sentiment to formulate execution levels:
-        Entry Zone, TP1, TP2, and Stop Loss (SL).
+        ATR-Calibrated Institutional Direct Scalping Engine (SL + TP1 + TP2 + TP3).
+        Automatically scales SL and 3-tier TP targets to M15 ATR(14) and nearest fractal swing structure.
         """
-        valid_supports = sorted([s for s in supports if s < curr_price])
-        valid_resistances = sorted([r for r in resistances if r > curr_price])
+        m15 = m15_data or technical_data
+        m5 = m5_data or m15
+        atr_m15 = float(m15.get("atr_14") or technical_data.get("atr_14") or 3.50)
+        session_name = str(m15.get("session_name") or "Global Session")
+        session_vol = str(m15.get("session_volatility") or "MEDIUM")
 
-        primary_sup = valid_supports[-1] if valid_supports else round(curr_price - 10.0, 2)
-        secondary_sup = valid_supports[-2] if len(valid_supports) >= 2 else round(primary_sup - 12.0, 2)
+        # Dynamic SL distance calibrated to live M15 ATR (strictly 25 to 65 pips / $2.50 to $6.50)
+        vol_mult = 1.35 if session_vol == "HIGH" else (1.20 if session_vol == "MEDIUM_HIGH" else 1.05)
+        base_risk = round(max(2.50, min(6.50, atr_m15 * vol_mult)), 2)
 
-        primary_res = valid_resistances[0] if valid_resistances else round(curr_price + 10.0, 2)
-        secondary_res = valid_resistances[1] if len(valid_resistances) >= 2 else round(primary_res + 14.0, 2)
+        # Check for imminent high-impact news blackout (< 15 min)
+        imminent_event = AIAgentEngine._has_imminent_high_impact_event(economic_events or [], minutes_window=15)
+        if imminent_event:
+            valid_sups = sorted([s for s in supports if s < curr_price], reverse=True)
+            valid_res = sorted([r for r in resistances if r > curr_price])
+            p_sup = valid_sups[0] if valid_sups else round(curr_price - base_risk, 2)
+            p_res = valid_res[0] if valid_res else round(curr_price + base_risk, 2)
+            sl = round(curr_price - base_risk, 2)
+            tp1 = round(curr_price + base_risk * 1.1, 2)
+            tp2 = round(curr_price + base_risk * 2.1, 2)
+            tp3 = round(curr_price + base_risk * 3.2, 2)
+            return {
+                "action": "WAIT",
+                "action_label": "WAIT / NEWS GUARD (<15m)",
+                "execution_type": "WAIT",
+                "scalp_timeframe": "M5 / M15",
+                "session_name": session_name,
+                "atr_pips": round(atr_m15 * 10.0, 1),
+                "entry_zone": f"Tunggu rilis {imminent_event} selesai",
+                "entry_price": round(curr_price, 2),
+                "stop_loss": sl,
+                "take_profit_1": tp1,
+                "take_profit_2": tp2,
+                "take_profit_3": tp3,
+                "risk_reward_ratio": "1 : 3.2",
+                "risk_pips": round(base_risk * 10.0, 1),
+                "reward_tp1_pips": round((tp1 - curr_price) * 10.0, 1),
+                "reward_tp2_pips": round((tp2 - curr_price) * 10.0, 1),
+                "reward_tp3_pips": round((tp3 - curr_price) * 10.0, 1),
+                "lot_management": "Tahan entry sementara hingga lonjakan spread news mereda",
+                "technical_rationale": (
+                    f"Perlindungan News Guard aktif: rilis High-Impact '{imminent_event}' berlangsung dalam <15 menit. "
+                    f"Hindari whipsaw spread; pantau breakout valid di atas ${p_res:.2f} atau breakdown di bawah ${p_sup:.2f}."
+                ),
+                "invalidation_level": "Lonjakan spread ekstrem menjelang rilis data High-Impact.",
+                "status": "ACTIVE",
+                "status_message": f"News Guard Aktif — Tunggu rilis {imminent_event}",
+            }
 
-        # High impact catalyst summary
-        high_impact_news = [e for e in economic_events if e.get("impact_level") == "HIGH"]
-        catalyst_desc = (
-            f"katalis rilis '{high_impact_news[0].get('event_title')}'"
-            if high_impact_news
-            else "sentimen arus makro & geopolitik terkini"
-        )
+        swing_lows = sorted([float(x) for x in (m15.get("swing_lows") or supports) if float(x) < curr_price], reverse=True)
+        swing_highs = sorted([float(x) for x in (m15.get("swing_highs") or resistances) if float(x) > curr_price])
+        ema9_m5 = m5.get("ema_9")
+
+        # Pocket half-width scales with ATR: tightly $0.60 - $1.00 (12 - 20 pips full zone)
+        half_zone = round(max(0.60, min(1.00, atr_m15 * 0.22)), 2)
 
         if bias == "BULLISH":
             action = "BUY"
-            action_label = "BUY (LONG) ON PULLBACK"
-            entry_price = round(curr_price, 2)
-            entry_low = round(entry_price - 1.0, 2)
-            entry_high = round(entry_price + 1.0, 2)
+            # Direct Instant Scalp if all 3 timeframes align, or price is near EMA 9 / Support / bullish PA
+            all_3tf_bull = (
+                str(technical_data.get("trend_direction", "")).upper() == "BULLISH"
+                and str(m15.get("trend_direction", "")).upper() == "BULLISH"
+                and str(m5.get("trend_direction", "")).upper() == "BULLISH"
+            )
+            near_ema = ema9_m5 is not None and abs(curr_price - float(ema9_m5)) <= (atr_m15 * 0.65)
+            near_sup = bool(swing_lows) and (curr_price - swing_lows[0]) <= (atr_m15 * 1.1)
+            is_instant = all_3tf_bull or near_ema or near_sup or str(m5.get("price_action", "")).startswith("BULLISH")
+
+            if is_instant:
+                execution_type = "INSTANT"
+                action_label = "BUY NOW (SCALP)"
+                entry_price = round(curr_price, 2)
+            else:
+                execution_type = "LIMIT"
+                action_label = "BUY LIMIT (PULLBACK)"
+                entry_price = round(curr_price - min(1.20, atr_m15 * 0.30), 2)
+
+            entry_low = round(entry_price - half_zone, 2)
+            entry_high = round(entry_price + half_zone, 2)
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
 
-            # Stop loss targeted to user preference: ~50 pips ($5.00), strictly below entry zone
-            stop_loss = round(entry_price - 5.0, 2)
+            # Place SL structurally behind nearest M15 swing low if within reasonable ATR risk band
+            structural_sl = None
+            for sw in swing_lows:
+                candidate_sl = round(sw - 0.80, 2)
+                dist = entry_price - candidate_sl
+                if 2.50 <= dist <= 6.80 and candidate_sl < entry_low:
+                    structural_sl = candidate_sl
+                    break
+            stop_loss = structural_sl if structural_sl is not None else round(entry_price - base_risk, 2)
             risk = round(entry_price - stop_loss, 2)
 
-            # TP1 targeted to user preference: 30-50 pips (~$4.00)
-            tp1 = round(entry_price + 4.0, 2)
+            # 3-Tier Scalping Targets: TP1 (~1.0x), TP2 (~2.0x), TP3 (~3.2x)
+            tp1 = round(entry_price + max(2.50, risk * 1.00), 2)
+            tp2 = round(entry_price + max(5.20, risk * 2.00), 2)
+            tp3 = round(entry_price + max(8.50, risk * 3.20), 2)
 
-            # TP2 targeted to user preference: 80-100+ pips (~$9.50) for hold runner
-            tp2 = round(entry_price + 9.5, 2)
+            # Snap TP2/TP3 slightly before major resistance if cleanly aligned
+            if swing_highs:
+                r1 = swing_highs[0]
+                if (tp1 + 1.50) <= (r1 - 0.40) <= (entry_price + risk * 2.50):
+                    tp2 = round(r1 - 0.40, 2)
+                    tp3 = max(tp3, round(tp2 + risk * 1.15, 2))
 
             reward1 = round(tp1 - entry_price, 2)
             reward2 = round(tp2 - entry_price, 2)
-            rrr = f"1 : {round(reward2 / risk, 1)}" if risk > 0 else "1 : 1.9"
+            reward3 = round(tp3 - entry_price, 2)
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 3.2"
 
+            pa_text = m5.get("price_action_note") or "momentum buyer M5/M15 terkonfirmasi"
             rationale = (
-                f"Sintesis 3 pilar mengonfirmasi setup Bullish didukung {catalyst_desc}. "
-                f"Rencana eksekusi: Ambil posisi Buy di zona ketat {entry_zone} dengan proteksi Stop Loss "
-                f"terukur 50 pips di ${stop_loss:.2f} (di bawah batas zona). "
-                f"Kunci profit 50% lot saat harga mencapai TP1 ${tp1:.2f} (+40 pips) dan segera geser SL ke Breakeven (BEP). "
-                f"Tahan (hold) sisa posisi untuk mengejar target swing ekspansi TP2 di ${tp2:.2f} (+95 pips)."
+                f"Direct BUY Scalp ({session_name}, ATR M15 {round(atr_m15 * 10, 1)} pips): {pa_text}. "
+                f"Entry di {entry_zone} dengan SL struktural ${stop_loss:.2f} (-{round(risk * 10):.0f} pips). "
+                f"Scaling 3-tahap: Kunci 40% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f} pips) & geser SL→BEP; "
+                f"kunci 40% di TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f} pips) & geser SL→TP1; "
+                f"biarkan 20% runner menuju TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f} pips)."
             )
-            invalidation = f"Candle H1 ditutup di bawah level support ${stop_loss:.2f} membatalkan validitas setup bullish ini."
+            invalidation = f"Close candle M15 di bawah ${stop_loss:.2f} membatalkan setup BUY scalp."
 
-        elif bias == "BEARISH":
+        else:
             action = "SELL"
-            action_label = "SELL (SHORT) ON RALLY"
-            entry_price = round(curr_price, 2)
-            entry_low = round(entry_price - 1.0, 2)
-            entry_high = round(entry_price + 1.0, 2)
+            all_3tf_bear = (
+                str(technical_data.get("trend_direction", "")).upper() == "BEARISH"
+                and str(m15.get("trend_direction", "")).upper() == "BEARISH"
+                and str(m5.get("trend_direction", "")).upper() == "BEARISH"
+            )
+            near_ema = ema9_m5 is not None and abs(curr_price - float(ema9_m5)) <= (atr_m15 * 0.65)
+            near_res = bool(swing_highs) and (swing_highs[0] - curr_price) <= (atr_m15 * 1.1)
+            is_instant = all_3tf_bear or near_ema or near_res or str(m5.get("price_action", "")).startswith("BEARISH")
+
+            if is_instant:
+                execution_type = "INSTANT"
+                action_label = "SELL NOW (SCALP)"
+                entry_price = round(curr_price, 2)
+            else:
+                execution_type = "LIMIT"
+                action_label = "SELL LIMIT (RALLY)"
+                entry_price = round(curr_price + min(1.20, atr_m15 * 0.30), 2)
+
+            entry_low = round(entry_price - half_zone, 2)
+            entry_high = round(entry_price + half_zone, 2)
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
 
-            # Stop loss targeted to user preference: ~50 pips ($5.00), strictly above entry zone
-            stop_loss = round(entry_price + 5.0, 2)
+            structural_sl = None
+            for sw in swing_highs:
+                candidate_sl = round(sw + 0.80, 2)
+                dist = candidate_sl - entry_price
+                if 2.50 <= dist <= 6.80 and candidate_sl > entry_high:
+                    structural_sl = candidate_sl
+                    break
+            stop_loss = structural_sl if structural_sl is not None else round(entry_price + base_risk, 2)
             risk = round(stop_loss - entry_price, 2)
 
-            # TP1 targeted to user preference: 30-50 pips (~$4.00)
-            tp1 = round(entry_price - 4.0, 2)
+            tp1 = round(entry_price - max(2.50, risk * 1.00), 2)
+            tp2 = round(entry_price - max(5.20, risk * 2.00), 2)
+            tp3 = round(entry_price - max(8.50, risk * 3.20), 2)
 
-            # TP2 targeted to user preference: 80-100+ pips (~$9.50) for hold runner
-            tp2 = round(entry_price - 9.5, 2)
+            if swing_lows:
+                s1 = swing_lows[0]
+                if (entry_price - risk * 2.50) <= (s1 + 0.40) <= (tp1 - 1.50):
+                    tp2 = round(s1 + 0.40, 2)
+                    tp3 = min(tp3, round(tp2 - risk * 1.15, 2))
 
             reward1 = round(entry_price - tp1, 2)
             reward2 = round(entry_price - tp2, 2)
-            rrr = f"1 : {round(reward2 / risk, 1)}" if risk > 0 else "1 : 1.9"
+            reward3 = round(entry_price - tp3, 2)
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 3.2"
 
+            pa_text = m5.get("price_action_note") or "tekanan seller M5/M15 terkonfirmasi"
             rationale = (
-                f"Tekanan jual makro dan teknikal mengonfirmasi setup Bearish didukung {catalyst_desc}. "
-                f"Rencana eksekusi: Ambil posisi Sell di zona ketat {entry_zone} dengan proteksi Stop Loss "
-                f"terukur 50 pips di ${stop_loss:.2f} (di atas batas zona). "
-                f"Kunci profit parsial di TP1 ${tp1:.2f} (+40 pips) dan amankan posisi dengan geser SL ke Breakeven (BEP). "
-                f"Tahan (hold) sisa lot untuk mengejar target swing pelemahan lanjutan TP2 di ${tp2:.2f} (+95 pips)."
+                f"Direct SELL Scalp ({session_name}, ATR M15 {round(atr_m15 * 10, 1)} pips): {pa_text}. "
+                f"Entry di {entry_zone} dengan SL struktural ${stop_loss:.2f} (-{round(risk * 10):.0f} pips). "
+                f"Scaling 3-tahap: Kunci 40% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f} pips) & geser SL→BEP; "
+                f"kunci 40% di TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f} pips) & geser SL→TP1; "
+                f"biarkan 20% runner menuju TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f} pips)."
             )
-            invalidation = f"Candle H1 ditutup di atas ${stop_loss:.2f} membatalkan validitas skenario bearish."
+            invalidation = f"Close candle M15 di atas ${stop_loss:.2f} membatalkan setup SELL scalp."
 
-        else:
-            action = "WAIT"
-            action_label = "WAIT / STANDBY (BREAKOUT STRADDLE)"
-            entry_price = curr_price
-            entry_zone = f"Breakout > ${primary_res:.2f} ATAU Breakdown < ${primary_sup:.2f}"
-            stop_loss = round(primary_sup - 5.0, 2)
-            tp1 = round(primary_res + 8.0, 2)
-            tp2 = round(primary_res + 18.0, 2)
-            risk = 8.0
-            reward1 = 10.0
-            reward2 = 20.0
-            rrr = "1 : 2.0"
-            rationale = (
-                f"Pasar berada di fase konsolidasi menyempit di antara Support ${primary_sup:.2f} dan "
-                f"Resistance ${primary_res:.2f} menantikan rilis {catalyst_desc}. Disarankan menahan diri "
-                f"(Wait & See) hingga terbentuk candle konfirmasi penembusan arah (Breakout) sebelum membuka posisi baru."
-            )
-            invalidation = "Volatilitas liar pasca rilis berita tanpa tren berkelanjutan (whipsaw)."
-
+        mode_hint = "Siap Eksekusi Langsung" if execution_type == "INSTANT" else "Tunggu Pullback ke Zona"
         return {
             "action": action,
             "action_label": action_label,
+            "execution_type": execution_type,
+            "scalp_timeframe": "M5 / M15",
+            "session_name": session_name,
+            "atr_pips": round(atr_m15 * 10.0, 1),
             "entry_zone": entry_zone,
             "entry_price": entry_price,
             "stop_loss": stop_loss,
             "take_profit_1": tp1,
             "take_profit_2": tp2,
+            "take_profit_3": tp3,
             "risk_reward_ratio": rrr,
-            "risk_pips": round(risk * 10, 1),
-            "reward_tp1_pips": round(reward1 * 10, 1),
-            "reward_tp2_pips": round(reward2 * 10, 1),
+            "risk_pips": round(risk * 10.0, 1),
+            "reward_tp1_pips": round(reward1 * 10.0, 1),
+            "reward_tp2_pips": round(reward2 * 10.0, 1),
+            "reward_tp3_pips": round(reward3 * 10.0, 1),
+            "lot_management": "40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3",
             "technical_rationale": rationale,
             "invalidation_level": invalidation,
             "status": "ACTIVE",
-            "status_message": f"Setup {action} Terkunci (Titik Acuan: ${entry_price:.2f}). Menunggu konfirmasi target/SL.",
+            "status_message": f"{action_label} • {mode_hint} (Acuan ${entry_price:.2f} | ATR {round(atr_m15 * 10, 1)} pips)",
         }
 
     @staticmethod
@@ -577,20 +780,25 @@ class AIAgentEngine:
         raw_data: Any,
         curr_price: float,
         technical_data: Optional[Dict[str, Any]] = None,
+        m15_data: Optional[Dict[str, Any]] = None,
+        m5_data: Optional[Dict[str, Any]] = None,
         economic_events: Optional[List[Dict[str, Any]]] = None,
         news_articles: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
-        Anti-Hallucination Guardrail & Sanitizer:
-        Ensures 100% adherence to live market prices, trading physics, and mathematical laws:
-        1. Guarantees prices anchor to curr_price (no pre-2024 cutoff hallucinations).
-        2. BUY physics: Stop Loss < Entry Price < Take Profit 1 < Take Profit 2.
-        3. SELL physics: Stop Loss > Entry Price > Take Profit 1 > Take Profit 2.
-        4. Re-calculates pip distances and Risk-to-Reward ratio with exact precision.
-        5. Sanitizes support/resistance levels.
+        Smart Non-Destructive Anti-Hallucination Guardrail & Scalping Validator:
+        1. PRESERVES Claude's genuine structural SL, TP1, TP2, TP3 & rationale when physically valid.
+        2. Dynamically repairs ONLY invalid/hallucinated levels using live M15 ATR(14).
+        3. Guarantees BUY physics: SL < entry_low <= entry_price <= entry_high < TP1 < TP2 < TP3.
+        4. Guarantees SELL physics: SL > entry_high >= entry_price >= entry_low > TP1 > TP2 > TP3.
+        5. Always recalculates exact pip distances and RRR from final prices (zero fake/mismatched pips).
         """
         if not isinstance(raw_data, dict):
             raw_data = {}
+
+        m15 = m15_data or technical_data or {}
+        atr_m15 = float(m15.get("atr_14") or (technical_data or {}).get("atr_14") or 3.50)
+        session_name = str(m15.get("session_name") or (technical_data or {}).get("session_name") or "Global Session")
 
         # 1. Bias normalization
         bias = str(raw_data.get("bias", "NEUTRAL")).strip().upper()
@@ -599,10 +807,10 @@ class AIAgentEngine:
 
         # 2. Confidence Score
         try:
-            confidence = int(raw_data.get("confidence_score", 70))
+            confidence = int(raw_data.get("confidence_score", 72))
         except (ValueError, TypeError):
-            confidence = 70
-        confidence = max(50, min(95, confidence))
+            confidence = 72
+        confidence = max(55, min(95, confidence))
 
         # 3. Key Levels (Support & Resistance)
         key_levels = raw_data.get("key_levels", {})
@@ -611,46 +819,42 @@ class AIAgentEngine:
         raw_sups = key_levels.get("support", [])
         raw_res = key_levels.get("resistance", [])
 
-        # Filter and validate supports (must be < curr_price and within 15% band)
         valid_sups: List[float] = []
         if isinstance(raw_sups, list):
             for s in raw_sups:
                 try:
                     sf = round(float(s), 2)
-                    if (curr_price * 0.85) < sf < curr_price:
+                    if (curr_price * 0.90) < sf < curr_price:
                         valid_sups.append(sf)
                 except (ValueError, TypeError):
                     continue
         valid_sups = sorted(list(set(valid_sups)), reverse=True)
         if not valid_sups:
-            tech_sups = (technical_data or {}).get("support_levels", [])
-            valid_sups = [round(float(s), 2) for s in tech_sups if (curr_price * 0.85) < float(s) < curr_price]
+            tech_sups = m15.get("support_levels") or (technical_data or {}).get("support_levels") or []
+            valid_sups = [round(float(s), 2) for s in tech_sups if (curr_price * 0.90) < float(s) < curr_price]
             if not valid_sups:
-                valid_sups = [round(curr_price - 18.0, 2), round(curr_price - 38.0, 2)]
+                valid_sups = [round(curr_price - max(4.0, atr_m15 * 1.5), 2), round(curr_price - max(9.0, atr_m15 * 3.0), 2)]
 
-        # Filter and validate resistances (must be > curr_price and within 15% band)
         valid_res: List[float] = []
         if isinstance(raw_res, list):
             for r in raw_res:
                 try:
                     rf = round(float(r), 2)
-                    if curr_price < rf < (curr_price * 1.15):
+                    if curr_price < rf < (curr_price * 1.10):
                         valid_res.append(rf)
                 except (ValueError, TypeError):
                     continue
         valid_res = sorted(list(set(valid_res)))
         if not valid_res:
-            tech_res = (technical_data or {}).get("resistance_levels", [])
-            valid_res = [round(float(r), 2) for r in tech_res if curr_price < float(r) < (curr_price * 1.15)]
+            tech_res = m15.get("resistance_levels") or (technical_data or {}).get("resistance_levels") or []
+            valid_res = [round(float(r), 2) for r in tech_res if curr_price < float(r) < (curr_price * 1.10)]
             if not valid_res:
-                valid_res = [round(curr_price + 18.0, 2), round(curr_price + 38.0, 2)]
+                valid_res = [round(curr_price + max(4.0, atr_m15 * 1.5), 2), round(curr_price + max(9.0, atr_m15 * 3.0), 2)]
 
         primary_sup = valid_sups[0]
-        secondary_sup = valid_sups[1] if len(valid_sups) > 1 else round(primary_sup - 15.0, 2)
         primary_res = valid_res[0]
-        secondary_res = valid_res[1] if len(valid_res) > 1 else round(primary_res + 15.0, 2)
 
-        # 4. Trade Setup Validation & Trading Law Enforcement
+        # 4. Trade Setup Validation (Preserves Claude levels when valid!)
         raw_setup = raw_data.get("trade_setup", {})
         if not isinstance(raw_setup, dict):
             raw_setup = {}
@@ -659,192 +863,198 @@ class AIAgentEngine:
         if action not in ["BUY", "SELL", "WAIT"]:
             action = "BUY" if bias == "BULLISH" else ("SELL" if bias == "BEARISH" else "WAIT")
 
-        # Entry Price Validation: Snaps to near live price if AI hallucinated or strayed too far
+        # Entry price anchored closely around live market price for scalping (max drift $3.00)
         try:
-            entry_p = float(raw_setup.get("entry_price", curr_price))
-            # If entry_p is more than $3.50 away from live curr_price, snap to near price
-            if abs(entry_p - curr_price) > 3.50:
-                logger.warning(f"[Guardrail] AI entry_price ${entry_p} far from live ${curr_price}, snapping near market")
-                if action == "BUY":
-                    entry_p = round(curr_price - 0.50, 2)
-                elif action == "SELL":
-                    entry_p = round(curr_price + 0.50, 2)
-                else:
-                    entry_p = round(curr_price, 2)
+            entry_p = round(float(raw_setup.get("entry_price", curr_price)), 2)
+            if abs(entry_p - curr_price) > 3.00 or entry_p <= 0:
+                entry_p = round(curr_price, 2)
         except (ValueError, TypeError):
-            entry_p = curr_price
+            entry_p = round(curr_price, 2)
 
-        # Enforce Trading Physics & User Strategy (SL ~50 pips, TP1 30-50 pips, TP2 80-100+ pips hold):
+        execution_type = str(raw_setup.get("execution_type", "")).strip().upper()
+        if execution_type not in ["INSTANT", "LIMIT", "WAIT"]:
+            if action == "WAIT":
+                execution_type = "WAIT"
+            else:
+                execution_type = "INSTANT" if abs(entry_p - curr_price) <= 0.80 else "LIMIT"
+
+        # Tight realistic scalping zone width ($1.20 - $2.00 full pocket)
+        half_zone = round(max(0.60, min(1.00, atr_m15 * 0.22)), 2)
+        default_risk = round(max(2.50, min(6.50, atr_m15 * 1.25)), 2)
+        min_risk = 1.80
+        max_risk = round(max(7.50, atr_m15 * 2.20), 2)
+
+        def safe_float(val: Any) -> float:
+            try:
+                return round(float(val), 2)
+            except (ValueError, TypeError):
+                return 0.0
+
+        ai_rationale = str(raw_setup.get("technical_rationale", "")).strip()
+        ai_invalidation = str(raw_setup.get("invalidation_level", "")).strip()
+        lot_mgmt = str(raw_setup.get("lot_management", "")).strip() or "40% TP1 (SL→BEP) • 40% TP2 (SL→TP1) • 20% Runner TP3"
+        scalp_tf = str(raw_setup.get("scalp_timeframe", "")).strip() or "M5 / M15"
+
         if action == "BUY":
-            action_label = "BUY (LONG) ON PULLBACK"
-            entry_price = round(entry_p, 2)
-            # Tight realistic execution zone: 15-20 pips ($1.50 - $2.00 pocket)
-            entry_low = round(entry_price - 1.00, 2)
-            entry_high = round(entry_price + 1.00, 2)
+            entry_price = entry_p
+            entry_low = round(entry_price - half_zone, 2)
+            entry_high = round(entry_price + half_zone, 2)
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
+            action_label = str(raw_setup.get("action_label", "")).strip() or (
+                "BUY NOW (SCALP)" if execution_type == "INSTANT" else "BUY LIMIT (PULLBACK)"
+            )
 
-            # Stop Loss MUST BE STRICTLY LESS THAN entry_low, calibrated to ~50 pips ($5.00)
-            try:
-                sl = float(raw_setup.get("stop_loss", 0))
-            except (ValueError, TypeError):
-                sl = 0
-            if sl >= entry_low or abs(entry_price - sl) > 5.5 or abs(entry_price - sl) < 4.5:
-                sl = round(entry_price - 5.0, 2)
-
+            sl = safe_float(raw_setup.get("stop_loss"))
+            if sl <= 0 or sl >= entry_low or (entry_price - sl) < min_risk or (entry_price - sl) > max_risk:
+                sl = round(entry_price - default_risk, 2)
             risk = round(entry_price - sl, 2)
-            if risk <= 0:
-                risk = 5.0
-                sl = round(entry_price - 5.0, 2)
 
-            # Take Profit 1 MUST BE GREATER THAN entry_high, calibrated to 30-50 pips ($3.00 - $5.00)
-            try:
-                tp1 = float(raw_setup.get("take_profit_1", 0))
-            except (ValueError, TypeError):
-                tp1 = 0
-            if tp1 <= entry_high or abs(tp1 - entry_price) > 5.0 or abs(tp1 - entry_price) < 3.0:
-                tp1 = round(entry_price + 4.0, 2)
+            tp1 = safe_float(raw_setup.get("take_profit_1"))
+            if tp1 <= entry_high or (tp1 - entry_price) < max(1.80, risk * 0.70) or (tp1 - entry_price) > (risk * 2.0):
+                tp1 = round(entry_price + max(2.50, risk * 1.00), 2)
 
-            # Take Profit 2 MUST BE GREATER THAN tp1, calibrated to 80-150 pips ($8.00 - $15.00) for hold runner
-            try:
-                tp2 = float(raw_setup.get("take_profit_2", 0))
-            except (ValueError, TypeError):
-                tp2 = 0
-            if tp2 <= tp1 or abs(tp2 - entry_price) < 8.0 or abs(tp2 - entry_price) > 16.0:
-                tp2 = round(entry_price + 9.5, 2)
+            tp2 = safe_float(raw_setup.get("take_profit_2"))
+            if tp2 <= (tp1 + 1.00) or (tp2 - entry_price) > (risk * 3.5):
+                tp2 = round(max(tp1 + 2.00, entry_price + risk * 2.00), 2)
+
+            tp3 = safe_float(raw_setup.get("take_profit_3"))
+            if tp3 <= (tp2 + 1.20) or (tp3 - entry_price) > (risk * 5.5):
+                tp3 = round(max(tp2 + 2.50, entry_price + risk * 3.20), 2)
 
             reward1 = round(tp1 - entry_price, 2)
             reward2 = round(tp2 - entry_price, 2)
-            rrr = f"1 : {round(reward2 / risk, 1)}" if risk > 0 else "1 : 1.9"
+            reward3 = round(tp3 - entry_price, 2)
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 3.2"
 
-            rationale = (
-                f"Setup disesuaikan profil trader: Pasang Stop Loss ~50 pips di ${sl:.2f} (di bawah batas zona). "
-                f"Kunci profit parsial 50% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f} pips) dan segera geser SL ke Breakeven (BEP). "
-                f"Tahan (hold) sisa posisi untuk mengejar target swing ekspansi TP2 di ${tp2:.2f} (+{round(reward2 * 10):.0f} pips)."
+            rationale = ai_rationale if len(ai_rationale) >= 25 else (
+                f"Setup Direct BUY Scalp ({session_name}): Entry {entry_zone}, SL ${sl:.2f} (-{round(risk * 10):.0f} pips). "
+                f"Amankan 40% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f} pips, SL→BEP), "
+                f"40% di TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f} pips, SL→TP1), "
+                f"dan 20% runner menuju TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f} pips)."
             )
-            invalidation = f"Candle H1 ditutup di bawah level support ${sl:.2f} membatalkan validitas skenario bullish."
+            invalidation = ai_invalidation if len(ai_invalidation) >= 12 else (
+                f"Close candle M15 di bawah ${sl:.2f} membatalkan setup BUY scalp."
+            )
 
         elif action == "SELL":
-            action_label = "SELL (SHORT) ON RALLY"
-            entry_price = round(entry_p, 2)
-            # Tight realistic execution zone: 15-20 pips ($1.50 - $2.00 pocket)
-            entry_low = round(entry_price - 1.00, 2)
-            entry_high = round(entry_price + 1.00, 2)
+            entry_price = entry_p
+            entry_low = round(entry_price - half_zone, 2)
+            entry_high = round(entry_price + half_zone, 2)
             entry_zone = f"${entry_low:.2f} - ${entry_high:.2f}"
+            action_label = str(raw_setup.get("action_label", "")).strip() or (
+                "SELL NOW (SCALP)" if execution_type == "INSTANT" else "SELL LIMIT (RALLY)"
+            )
 
-            # Stop Loss MUST BE STRICTLY GREATER THAN entry_high, calibrated to ~50 pips ($5.00)
-            try:
-                sl = float(raw_setup.get("stop_loss", 0))
-            except (ValueError, TypeError):
-                sl = 0
-            if sl <= entry_high or abs(sl - entry_price) > 5.5 or abs(sl - entry_price) < 4.5:
-                sl = round(entry_price + 5.0, 2)
-
+            sl = safe_float(raw_setup.get("stop_loss"))
+            if sl <= 0 or sl <= entry_high or (sl - entry_price) < min_risk or (sl - entry_price) > max_risk:
+                sl = round(entry_price + default_risk, 2)
             risk = round(sl - entry_price, 2)
-            if risk <= 0:
-                risk = 5.0
-                sl = round(entry_price + 5.0, 2)
 
-            # Take Profit 1 MUST BE LESS THAN entry_low, calibrated to 30-50 pips ($3.00 - $5.00)
-            try:
-                tp1 = float(raw_setup.get("take_profit_1", 0))
-            except (ValueError, TypeError):
-                tp1 = 0
-            if tp1 >= entry_low or abs(entry_price - tp1) > 5.0 or abs(entry_price - tp1) < 3.0:
-                tp1 = round(entry_price - 4.0, 2)
+            tp1 = safe_float(raw_setup.get("take_profit_1"))
+            if tp1 <= 0 or tp1 >= entry_low or (entry_price - tp1) < max(1.80, risk * 0.70) or (entry_price - tp1) > (risk * 2.0):
+                tp1 = round(entry_price - max(2.50, risk * 1.00), 2)
 
-            # Take Profit 2 MUST BE LESS THAN tp1, calibrated to 80-150 pips ($8.00 - $15.00) for hold runner
-            try:
-                tp2 = float(raw_setup.get("take_profit_2", 0))
-            except (ValueError, TypeError):
-                tp2 = 0
-            if tp2 >= tp1 or abs(entry_price - tp2) < 8.0 or abs(entry_price - tp2) > 16.0:
-                tp2 = round(entry_price - 9.5, 2)
+            tp2 = safe_float(raw_setup.get("take_profit_2"))
+            if tp2 <= 0 or tp2 >= (tp1 - 1.00) or (entry_price - tp2) > (risk * 3.5):
+                tp2 = round(min(tp1 - 2.00, entry_price - risk * 2.00), 2)
+
+            tp3 = safe_float(raw_setup.get("take_profit_3"))
+            if tp3 <= 0 or tp3 >= (tp2 - 1.20) or (entry_price - tp3) > (risk * 5.5):
+                tp3 = round(min(tp2 - 2.50, entry_price - risk * 3.20), 2)
 
             reward1 = round(entry_price - tp1, 2)
             reward2 = round(entry_price - tp2, 2)
-            rrr = f"1 : {round(reward2 / risk, 1)}" if risk > 0 else "1 : 1.9"
+            reward3 = round(entry_price - tp3, 2)
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 3.2"
 
-            rationale = (
-                f"Setup disesuaikan profil trader: Pasang Stop Loss ~50 pips di ${sl:.2f} (di atas batas zona). "
-                f"Kunci profit parsial 50% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f} pips) dan amankan posisi dengan geser SL ke Breakeven (BEP). "
-                f"Tahan (hold) sisa lot untuk mengejar target swing pelemahan lanjutan TP2 di ${tp2:.2f} (+{round(reward2 * 10):.0f} pips)."
+            rationale = ai_rationale if len(ai_rationale) >= 25 else (
+                f"Setup Direct SELL Scalp ({session_name}): Entry {entry_zone}, SL ${sl:.2f} (-{round(risk * 10):.0f} pips). "
+                f"Amankan 40% di TP1 ${tp1:.2f} (+{round(reward1 * 10):.0f} pips, SL→BEP), "
+                f"40% di TP2 ${tp2:.2f} (+{round(reward2 * 10):.0f} pips, SL→TP1), "
+                f"dan 20% runner menuju TP3 ${tp3:.2f} (+{round(reward3 * 10):.0f} pips)."
             )
-            invalidation = f"Candle H1 ditutup di atas ${sl:.2f} membatalkan validitas skenario bearish."
+            invalidation = ai_invalidation if len(ai_invalidation) >= 12 else (
+                f"Close candle M15 di atas ${sl:.2f} membatalkan setup SELL scalp."
+            )
 
         else:
             action = "WAIT"
-            action_label = "WAIT / STANDBY (BREAKOUT STRADDLE)"
+            execution_type = "WAIT"
+            action_label = str(raw_setup.get("action_label", "")).strip() or "WAIT / NEWS GUARD"
             entry_price = round(curr_price, 2)
-            entry_zone = f"Breakout > ${primary_res:.2f} ATAU Breakdown < ${primary_sup:.2f}"
-            sl = round(primary_sup - 5.0, 2)
-            tp1 = round(primary_res + 8.0, 2)
-            tp2 = round(primary_res + 18.0, 2)
-            risk = 8.0
-            reward1 = 10.0
-            reward2 = 20.0
-            rrr = "1 : 2.0"
-            rationale = raw_setup.get("technical_rationale")
-            if not rationale or len(str(rationale).strip()) < 20:
-                rationale = (
-                    f"Harga berkonsolidasi di rentang Support ${primary_sup:.2f} dan Resistance ${primary_res:.2f}. "
-                    f"Disarankan menahan diri (Standby) dan menunggu konfirmasi penembusan arah (Breakout) yang jelas."
-                )
-            invalidation = "Volatilitas liar pasca rilis berita tanpa tren berkelanjutan (whipsaw)."
+            entry_zone = str(raw_setup.get("entry_zone", "")).strip() or f"Breakout > ${primary_res:.2f} / < ${primary_sup:.2f}"
+            sl = round(entry_price - default_risk, 2)
+            tp1 = round(entry_price + default_risk * 1.0, 2)
+            tp2 = round(entry_price + default_risk * 2.0, 2)
+            tp3 = round(entry_price + default_risk * 3.2, 2)
+            risk = default_risk
+            reward1 = round(tp1 - entry_price, 2)
+            reward2 = round(tp2 - entry_price, 2)
+            reward3 = round(tp3 - entry_price, 2)
+            rrr = f"1 : {round(reward3 / risk, 1)}" if risk > 0 else "1 : 3.2"
+            rationale = ai_rationale if len(ai_rationale) >= 20 else (
+                f"Menunggu konfirmasi breakout dari area ${primary_sup:.2f}–${primary_res:.2f} agar terhindar dari whipsaw."
+            )
+            invalidation = ai_invalidation if len(ai_invalidation) >= 10 else "Lonjakan spread & whipsaw news."
+
+        mode_hint = (
+            "Siap Eksekusi Langsung"
+            if execution_type == "INSTANT"
+            else ("Tunggu Pullback ke Zona" if execution_type == "LIMIT" else "Standby / News Guard")
+        )
 
         trade_setup = {
             "action": action,
             "action_label": action_label,
+            "execution_type": execution_type,
+            "scalp_timeframe": scalp_tf,
+            "session_name": session_name,
+            "atr_pips": round(atr_m15 * 10.0, 1),
             "entry_zone": entry_zone,
             "entry_price": entry_price,
             "stop_loss": sl,
             "take_profit_1": tp1,
             "take_profit_2": tp2,
+            "take_profit_3": tp3,
             "risk_reward_ratio": rrr,
-            "risk_pips": round(risk * 10, 1),
-            "reward_tp1_pips": round(reward1 * 10, 1),
-            "reward_tp2_pips": round(reward2 * 10, 1),
+            "risk_pips": round(risk * 10.0, 1),
+            "reward_tp1_pips": round(reward1 * 10.0, 1),
+            "reward_tp2_pips": round(reward2 * 10.0, 1),
+            "reward_tp3_pips": round(reward3 * 10.0, 1),
+            "lot_management": lot_mgmt,
             "technical_rationale": str(rationale),
             "invalidation_level": str(invalidation),
             "status": "ACTIVE",
-            "status_message": f"Setup {action} Terkunci (Titik Acuan: ${entry_price:.2f}). Menunggu konfirmasi target/SL.",
+            "status_message": f"{action_label} • {mode_hint} (Acuan ${entry_price:.2f} | ATR {round(atr_m15 * 10, 1)} pips)",
         }
 
-        # 5. Clean Summaries and Notes
-        summary = str(raw_data.get("summary", "")).strip()
-        if not summary:
-            summary = f"Analisis XAUUSD mengonfirmasi bias {bias} dengan tingkat keyakinan {confidence}%, berpatokan pada level teknikal ${curr_price:.2f}."
-
-        fund_notes = str(raw_data.get("fundamental_notes", "")).strip()
-        if not fund_notes:
-            fund_notes = "Sentimen suku bunga The Fed dan dinamika inflasi/tenaga kerja AS menjadi jangkar utama pergerakan harga."
-
-        geo_notes = str(raw_data.get("geopolitical_notes", "")).strip()
-        if not geo_notes:
-            geo_notes = "Transmisi tensi geopolitik global dan harga komoditas energi menopang permintaan safe-haven emas."
-
-        tech_notes = str(raw_data.get("technical_notes", "")).strip()
-        if not tech_notes:
-            tech_notes = f"Struktur chart menguji level Support ${primary_sup:.2f} dan Resistance ${primary_res:.2f}."
+        # 5. Clean Summaries & Notes
+        summary = str(raw_data.get("summary", "")).strip() or (
+            f"Analisis multi-timeframe {symbol} mengonfirmasi bias {bias} ({confidence}%) pada sesi {session_name} di sekitar ${curr_price:.2f}."
+        )
+        fund_notes = str(raw_data.get("fundamental_notes", "")).strip() or (
+            "Kebijakan suku bunga The Fed, data inflasi/tenaga kerja AS, serta arah DXY & Yield US10Y menjadi katalis fundamental utama."
+        )
+        geo_notes = str(raw_data.get("geopolitical_notes", "")).strip() or (
+            "Arus berita geopolitik global dan permintaan aset safe-haven menopang likuiditas emas intraday."
+        )
+        tech_notes = str(raw_data.get("technical_notes", "")).strip() or (
+            f"Struktur M15/H1 memantau Support ${primary_sup:.2f} dan Resistance ${primary_res:.2f} dengan ATR M15 {round(atr_m15 * 10, 1)} pips."
+        )
 
         # 6. Risk factors & Sources
         raw_risks = raw_data.get("risk_factors", [])
-        if not isinstance(raw_risks, list) or not raw_risks:
-            risks = [
-                "Volatilitas tajam pasca rilis kalender ekonomi high-impact berpotensi menguji batas invalidasi.",
-                f"Penembusan harga di luar rentang ${primary_sup:.2f} - ${primary_res:.2f} membatalkan validitas skenario."
-            ]
-        else:
-            risks = [str(r) for r in raw_risks if str(r).strip()][:4]
+        risks = [str(r) for r in raw_risks if str(r).strip()][:4] if isinstance(raw_risks, list) and raw_risks else [
+            "Volatilitas tajam saat rilis berita High-Impact AS berpotensi memicu sweep likuiditas.",
+            f"Penembusan candle M15 melewati level invalidasi ${sl:.2f} membatalkan setup.",
+        ]
 
         raw_sources = raw_data.get("sources", [])
-        if not isinstance(raw_sources, list) or not raw_sources:
-            sources = [
-                "Kalender Ekonomi Resmi ForexFactory",
-                "Chart Teknikal TradingView & Indikator Moving Average/RSI",
-                "Arus Berita Makroekonomi & Geopolitik Global"
-            ]
-        else:
-            sources = [str(s) for s in raw_sources if str(s).strip()][:4]
+        sources = [str(s) for s in raw_sources if str(s).strip()][:4] if isinstance(raw_sources, list) and raw_sources else [
+            f"Multi-Timeframe M5/M15/H1 & ATR(14) ({round(atr_m15 * 10, 1)} pips)",
+            "Kalender Ekonomi ForexFactory",
+            "Arus Berita Global & Geopolitik XAU/USD",
+        ]
 
         return {
             "bias": bias,

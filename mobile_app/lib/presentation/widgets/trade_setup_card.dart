@@ -37,25 +37,24 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
     final s = widget.setup;
     final isBuy = s.action.toUpperCase() == 'BUY';
     final isSell = s.action.toUpperCase() == 'SELL';
+    final isInstant = s.executionType.toUpperCase() == 'INSTANT';
 
     final Color actionColor = isBuy
         ? AppColors.bullish
         : (isSell ? AppColors.bearish : AppColors.gold);
 
     final String shortBadge = isBuy
-        ? (s.actionLabel.toUpperCase().contains('LIMIT') ? 'BUY LIMIT' : 'BUY SETUP')
-        : (isSell
-            ? (s.actionLabel.toUpperCase().contains('LIMIT') ? 'SELL LIMIT' : 'SELL SETUP')
-            : 'WAIT');
+        ? (isInstant ? 'BUY NOW' : 'BUY LIMIT')
+        : (isSell ? (isInstant ? 'SELL NOW' : 'SELL LIMIT') : 'WAIT');
 
     return IosGlassCard(
       borderRadius: 20,
       padding: const EdgeInsets.all(18),
-      borderColor: actionColor.withValues(alpha: 0.22),
+      borderColor: actionColor.withValues(alpha: 0.24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Clean Institutional Header Row: Title + RRR & Action Badges
+          // 1. Institutional Header Row: Title + RRR & Action Badges
           Row(
             children: [
               Container(
@@ -72,19 +71,19 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'RADAR TRADE SETUP',
+                  'RADAR SCALP SETUP',
                   style: TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 0.7,
+                    letterSpacing: 0.6,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 6),
-              // RRR Pill (Sky Cyan Monospace)
+              // RRR Pill
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                 decoration: BoxDecoration(
@@ -102,63 +101,84 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
                 ),
               ),
               const SizedBox(width: 6),
-              // Action Pill (BUY / SELL)
+              // Action Pill (BUY NOW / SELL NOW / LIMIT)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: actionColor.withValues(alpha: 0.14),
+                  color: actionColor.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: actionColor.withValues(alpha: 0.38), width: 0.8),
+                  border: Border.all(color: actionColor.withValues(alpha: 0.45), width: 0.9),
                 ),
-                child: Text(
-                  shortBadge,
-                  style: TextStyle(
-                    color: actionColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isInstant && (isBuy || isSell)) ...[
+                      Icon(LucideIcons.zap, color: actionColor, size: 10),
+                      const SizedBox(width: 3),
+                    ],
+                    Text(
+                      shortBadge,
+                      style: TextStyle(
+                        color: actionColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
-          // Compact Lifecycle Status Strip
+          // Meta Context Chips (Timeframe + Session + ATR)
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _buildMetaPill(LucideIcons.clock, s.scalpTimeframe, AppColors.gold),
+              if (s.sessionName.isNotEmpty)
+                _buildMetaPill(LucideIcons.globe, s.sessionName, AppColors.textSecondary),
+              if (s.atrPips > 0)
+                _buildMetaPill(LucideIcons.activity, 'ATR ${s.atrPips.toStringAsFixed(0)}p', AppColors.cyan),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Compact Lifecycle Status Strip (ACTIVE / TP1 HIT / TP2 HIT)
           Builder(
             builder: (context) {
               final setupStatus = s.safeStatus.toUpperCase();
               final setupMessage = s.safeStatusMessage;
-              final isTp1 = setupStatus.contains('TP1');
+              final isTpHit = setupStatus.contains('TP1') || setupStatus.contains('TP2');
               final isStop = setupStatus.contains('STOP');
 
-              final Color statusColor = isTp1
+              final Color statusColor = isTpHit
                   ? AppColors.bullish
                   : (isStop ? AppColors.bearish : AppColors.cyan);
 
-              final IconData statusIcon = isTp1
+              final IconData statusIcon = isTpHit
                   ? LucideIcons.circleCheck
-                  : (isStop
-                      ? LucideIcons.octagonAlert
-                      : LucideIcons.shieldCheck);
+                  : (isStop ? LucideIcons.octagonAlert : LucideIcons.shieldCheck);
 
               return Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7.5),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceInset,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.22), width: 0.8),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.24), width: 0.8),
                 ),
                 child: Row(
                   children: [
-                    Icon(statusIcon, color: statusColor, size: 13),
+                    Icon(statusIcon, color: statusColor, size: 13.5),
                     const SizedBox(width: 7),
                     Expanded(
                       child: Text(
                         setupMessage,
                         style: TextStyle(
-                          color: isTp1 || isStop ? statusColor : AppColors.textSecondary,
+                          color: isTpHit || isStop ? statusColor : AppColors.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -173,24 +193,24 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
           ),
           const SizedBox(height: 14),
 
-          // 2. Precision 2x2 Grid: Zona Entri, Stop Loss, TP1, TP2
+          // 2. Top 2-Column Row: ZONA ENTRI & STOP LOSS
           Row(
             children: [
               Expanded(
-                child: _buildMetricTile(
+                child: _buildPrimaryTile(
                   label: 'ZONA ENTRI',
                   value: s.entryZone.isNotEmpty ? s.entryZone : '\$${s.entryPrice.toStringAsFixed(2)}',
-                  pipBadge: 'Acuan \$${s.entryPrice.toStringAsFixed(1)}',
+                  badge: '${isInstant ? 'Market' : 'Acuan'} \$${s.entryPrice.toStringAsFixed(2)}',
                   valueColor: AppColors.textPrimary,
                   accentColor: AppColors.cyan,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildMetricTile(
-                  label: 'STOP LOSS',
+                child: _buildPrimaryTile(
+                  label: 'STOP LOSS (SL)',
                   value: '\$${s.stopLoss.toStringAsFixed(2)}',
-                  pipBadge: s.riskPips > 0 ? '-${s.riskPips.toStringAsFixed(0)} pips' : 'Risk Guard',
+                  badge: s.riskPips > 0 ? '-${s.riskPips.toStringAsFixed(0)} pips' : 'Risk Guard',
                   valueColor: AppColors.bearish,
                   accentColor: AppColors.bearish,
                 ),
@@ -198,32 +218,80 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
             ],
           ),
           const SizedBox(height: 10),
+
+          // 3. 3-Column Target Scaling Ladder: TP1 (40%) | TP2 (40%) | TP3 (20%)
           Row(
             children: [
               Expanded(
-                child: _buildMetricTile(
-                  label: 'TAKE PROFIT 1',
+                child: _buildTargetTile(
+                  tier: 'TP 1',
+                  lotPct: '40%',
                   value: '\$${s.takeProfit1.toStringAsFixed(2)}',
-                  pipBadge: s.rewardTp1Pips > 0 ? '+${s.rewardTp1Pips.toStringAsFixed(0)} pips' : 'Target 1',
-                  valueColor: AppColors.bullish,
+                  pips: s.rewardTp1Pips > 0 ? '+${s.rewardTp1Pips.toStringAsFixed(0)}p' : 'Quick',
+                  actionHint: 'SL → BEP',
                   accentColor: AppColors.bullish,
+                  isHit: s.safeStatus.toUpperCase().contains('TP1') || s.safeStatus.toUpperCase().contains('TP2'),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
-                child: _buildMetricTile(
-                  label: 'TAKE PROFIT 2',
+                child: _buildTargetTile(
+                  tier: 'TP 2',
+                  lotPct: '40%',
                   value: '\$${s.takeProfit2.toStringAsFixed(2)}',
-                  pipBadge: s.rewardTp2Pips > 0 ? '+${s.rewardTp2Pips.toStringAsFixed(0)} pips' : 'Ekspansi',
-                  valueColor: AppColors.gold,
+                  pips: s.rewardTp2Pips > 0 ? '+${s.rewardTp2Pips.toStringAsFixed(0)}p' : 'Main',
+                  actionHint: 'SL → TP1',
+                  accentColor: AppColors.bullish,
+                  isHit: s.safeStatus.toUpperCase().contains('TP2'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildTargetTile(
+                  tier: 'TP 3',
+                  lotPct: '20%',
+                  value: '\$${s.takeProfit3.toStringAsFixed(2)}',
+                  pips: s.rewardTp3Pips > 0 ? '+${s.rewardTp3Pips.toStringAsFixed(0)}p' : 'Runner',
+                  actionHint: 'Runner',
                   accentColor: AppColors.gold,
+                  isHit: false,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // 3. Clean Accordion: "Rasional Eksekusi Setup"
+          // Lot Management Strip
+          if (s.lotManagement.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppColors.gold.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.gold.withValues(alpha: 0.20), width: 0.7),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.layers, color: AppColors.gold, size: 12.5),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      s.lotManagement,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // 4. Accordion: "Rasional Eksekusi Setup"
           Container(
             decoration: BoxDecoration(
               color: AppColors.surfaceInset,
@@ -360,10 +428,36 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
     );
   }
 
-  Widget _buildMetricTile({
+  Widget _buildMetaPill(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceInset,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: AppColors.border, width: 0.7),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 10.5),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrimaryTile({
     required String label,
     required String value,
-    required String pipBadge,
+    required String badge,
     required Color valueColor,
     required Color accentColor,
   }) {
@@ -382,10 +476,7 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
               Container(
                 width: 6,
                 height: 6,
-                decoration: BoxDecoration(
-                  color: accentColor,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: accentColor, shape: BoxShape.circle),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -411,9 +502,9 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
               value,
               style: AppTypography.mono(
                 color: valueColor,
-                fontSize: 15,
+                fontSize: 14.5,
                 fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
+                letterSpacing: -0.2,
               ),
             ),
           ),
@@ -421,11 +512,11 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.11),
+              color: accentColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(5),
             ),
             child: Text(
-              pipBadge,
+              badge,
               style: AppTypography.mono(
                 color: accentColor,
                 fontSize: 9.5,
@@ -434,6 +525,118 @@ class _TradeSetupCardState extends State<TradeSetupCard> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTargetTile({
+    required String tier,
+    required String lotPct,
+    required String value,
+    required String pips,
+    required String actionHint,
+    required Color accentColor,
+    required bool isHit,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+      decoration: BoxDecoration(
+        color: isHit ? accentColor.withValues(alpha: 0.12) : AppColors.surfaceInset,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: isHit ? accentColor.withValues(alpha: 0.55) : AppColors.border,
+          width: isHit ? 1.0 : 0.8,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 5.5,
+                    height: 5.5,
+                    decoration: BoxDecoration(color: accentColor, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    tier,
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                lotPct,
+                style: AppTypography.mono(
+                  color: AppColors.textTertiary,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: AppTypography.mono(
+                color: accentColor,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    pips,
+                    style: AppTypography.mono(
+                      color: accentColor,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 3),
+              Flexible(
+                child: Text(
+                  actionHint,
+                  style: const TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
         ],
       ),
