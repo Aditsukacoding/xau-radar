@@ -69,41 +69,65 @@ def _orm_to_dict(ev: EconomicEvent, idx: int) -> Dict[str, Any]:
     }
 
 
+_LAST_FF_DB_SYNC_TS: float = 0.0
+
+
 async def _sync_ff_to_db(raw_events: list, db: Session):
-    """Persist/upsert ForexFactory events into DB for offline fallback."""
-    for ev in raw_events:
-        ext_id = ev.get("external_id")
-        if not ext_id:
-            continue
-        existing = db.query(EconomicEvent).filter(EconomicEvent.external_id == ext_id).first()
-        if not existing:
-            db.add(EconomicEvent(
-                external_id=ext_id,
-                currency=ev.get("currency", "USD"),
-                event_title=ev.get("event_title", ""),
-                impact_level=ev.get("impact_level", "LOW"),
-                scheduled_at=ev.get("scheduled_at"),
-                actual_value=ev.get("actual_value"),
-                forecast_value=ev.get("forecast_value"),
-                previous_value=ev.get("previous_value"),
-                unit=ev.get("unit", ""),
-                sentiment_impact=ev.get("sentiment_impact", "NEUTRAL"),
-            ))
-        else:
-            # Update mutable fields
-            changed = False
-            for field, new_val in [
-                ("actual_value", ev.get("actual_value")),
-                ("forecast_value", ev.get("forecast_value")),
-                ("previous_value", ev.get("previous_value")),
-                ("impact_level", ev.get("impact_level")),
-                ("sentiment_impact", ev.get("sentiment_impact")),
-            ]:
-                if new_val is not None and getattr(existing, field) != new_val:
-                    setattr(existing, field, new_val)
-                    changed = True
+    """Bulk-upsert ForexFactory events in 1 SELECT + 1 multi-row INSERT (10-min cooldown on serverless)."""
+    global _LAST_FF_DB_SYNC_TS
+    import time
+    from sqlalchemy import insert as sa_insert
+    now_ts = time.time()
+    if (now_ts - _LAST_FF_DB_SYNC_TS) < 600.0:
+        return
+
+    def _naive(dt):
+        if dt is None:
+            return None
+        return dt.astimezone(timezone.utc).replace(tzinfo=None) if getattr(dt, "tzinfo", None) else dt
+
     try:
-        db.commit()
+        existing_rows = db.query(EconomicEvent).filter(EconomicEvent.external_id.isnot(None)).all()
+        existing_map = {r.external_id: r for r in existing_rows}
+        new_dicts = []
+        dirty = False
+        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        for ev in raw_events:
+            ext_id = ev.get("external_id")
+            if not ext_id:
+                continue
+            existing = existing_map.get(ext_id)
+            if existing is None:
+                existing_map[ext_id] = True
+                new_dicts.append({
+                    "external_id": ext_id,
+                    "currency": ev.get("currency", "USD"),
+                    "event_title": ev.get("event_title", ""),
+                    "impact_level": ev.get("impact_level", "LOW"),
+                    "scheduled_at": _naive(ev.get("scheduled_at")),
+                    "actual_value": ev.get("actual_value"),
+                    "forecast_value": ev.get("forecast_value"),
+                    "previous_value": ev.get("previous_value"),
+                    "unit": ev.get("unit", ""),
+                    "sentiment_impact": ev.get("sentiment_impact", "NEUTRAL"),
+                    "created_at": now_naive,
+                })
+            elif existing is not True:
+                for field, new_val in [
+                    ("actual_value", ev.get("actual_value")),
+                    ("forecast_value", ev.get("forecast_value")),
+                    ("previous_value", ev.get("previous_value")),
+                ]:
+                    if new_val is not None and getattr(existing, field) != new_val:
+                        setattr(existing, field, new_val)
+                        dirty = True
+
+        if new_dicts:
+            db.execute(sa_insert(EconomicEvent).values(new_dicts))
+        if new_dicts or dirty:
+            db.commit()
+        _LAST_FF_DB_SYNC_TS = now_ts
     except Exception:
         db.rollback()
 

@@ -309,81 +309,118 @@ class IngestionService:
         except Exception:
             db.rollback()
 
+        from sqlalchemy import insert as sa_insert
+
+        def _naive(dt):
+            if dt is None:
+                return None
+            return dt.astimezone(timezone.utc).replace(tzinfo=None) if getattr(dt, "tzinfo", None) else dt
+
+        # Bulk-check existing titles & urls in 1 SELECT (eliminates 45 N+1 queries on Neon!)
+        existing_pairs = (
+            db.query(NewsArticle.title, NewsArticle.url)
+            .filter(NewsArticle.symbol == symbol.upper())
+            .order_by(desc(NewsArticle.published_at))
+            .limit(200)
+            .all()
+        )
+        seen_titles = {r[0] for r in existing_pairs if r[0]}
+        seen_urls = {r[1] for r in existing_pairs if r[1]}
+        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+        new_rows = []
         for nw in raw_news:
-            exists = db.query(NewsArticle).filter(
-                (NewsArticle.title == nw["title"]) | (NewsArticle.url == nw.get("url"))
-            ).first()
-            if not exists:
-                db.add(NewsArticle(
-                    symbol=symbol.upper(),
-                    title=nw["title"],
-                    source=nw["source"],
-                    url=nw.get("url"),
-                    summary=nw.get("summary"),
-                    sentiment_label=nw["sentiment_label"],
-                    sentiment_score=nw["sentiment_score"],
-                    published_at=nw["published_at"],
-                ))
-                new_count += 1
-        if new_count > 0:
-            db.commit()
-            logger.info(f"Ingested {new_count} new breaking news articles into database.")
+            t = nw.get("title")
+            u = nw.get("url")
+            if t in seen_titles or (u and u in seen_urls):
+                continue
+            seen_titles.add(t)
+            if u:
+                seen_urls.add(u)
+            new_rows.append({
+                "symbol": symbol.upper(),
+                "title": t,
+                "source": nw["source"],
+                "url": u,
+                "summary": nw.get("summary"),
+                "sentiment_label": nw["sentiment_label"],
+                "sentiment_score": nw["sentiment_score"],
+                "published_at": _naive(nw["published_at"]),
+                "created_at": now_naive,
+            })
+
+        if new_rows:
+            try:
+                db.execute(sa_insert(NewsArticle).values(new_rows))
+                db.commit()
+                new_count = len(new_rows)
+                logger.info(f"Ingested {new_count} new breaking news articles into database.")
+            except Exception as e:
+                logger.warning(f"Bulk news insert skipped: {e}")
+                db.rollback()
         return new_count
 
     @staticmethod
     async def ingest_latest_calendar(db: Session) -> int:
         """
-        Fetches latest economic calendar events from ForexFactory and performs a full upsert:
-        - Inserts new events never seen before
-        - Updates forecast, previous, and actual values when data changes (actuals released intraday)
-        Returns count of inserted or updated records.
+        Fetches latest economic calendar events from ForexFactory and performs a bulk 1-SELECT upsert.
         """
+        from sqlalchemy import insert as sa_insert
+
+        def _naive(dt):
+            if dt is None:
+                return None
+            return dt.astimezone(timezone.utc).replace(tzinfo=None) if getattr(dt, "tzinfo", None) else dt
+
         provider = get_data_provider()
         raw_events = await provider.get_economic_calendar()
+        if not raw_events:
+            return 0
+
+        existing_rows = db.query(EconomicEvent).filter(EconomicEvent.external_id.isnot(None)).all()
+        existing_map = {r.external_id: r for r in existing_rows}
+        new_rows = []
         updated_count = 0
+        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+
         for ev in raw_events:
             ext_id = ev.get("external_id")
             if not ext_id:
                 continue
-
-            existing = db.query(EconomicEvent).filter(EconomicEvent.external_id == ext_id).first()
-            if not existing:
-                # Insert new event
-                db.add(EconomicEvent(
-                    external_id=ext_id,
-                    currency=ev["currency"],
-                    event_title=ev["event_title"],
-                    impact_level=ev["impact_level"],
-                    scheduled_at=ev["scheduled_at"],
-                    actual_value=ev.get("actual_value"),
-                    forecast_value=ev.get("forecast_value"),
-                    previous_value=ev.get("previous_value"),
-                    sentiment_impact=ev.get("sentiment_impact"),
-                ))
+            existing = existing_map.get(ext_id)
+            if existing is None:
+                existing_map[ext_id] = True
+                new_rows.append({
+                    "external_id": ext_id,
+                    "currency": ev["currency"],
+                    "event_title": ev["event_title"],
+                    "impact_level": ev["impact_level"],
+                    "scheduled_at": _naive(ev["scheduled_at"]),
+                    "actual_value": ev.get("actual_value"),
+                    "forecast_value": ev.get("forecast_value"),
+                    "previous_value": ev.get("previous_value"),
+                    "sentiment_impact": ev.get("sentiment_impact"),
+                    "created_at": now_naive,
+                })
                 updated_count += 1
-            else:
-                # Upsert: update any changed fields
+            elif existing is not True:
                 changed = False
-                new_actual = ev.get("actual_value")
-                new_forecast = ev.get("forecast_value")
-                new_prev = ev.get("previous_value")
-
-                if new_actual is not None and existing.actual_value != new_actual:
-                    existing.actual_value = new_actual
-                    changed = True
-                if new_forecast is not None and existing.forecast_value != new_forecast:
-                    existing.forecast_value = new_forecast
-                    changed = True
-                if new_prev is not None and existing.previous_value != new_prev:
-                    existing.previous_value = new_prev
-                    changed = True
-
+                for field, key in (("actual_value", "actual_value"), ("forecast_value", "forecast_value"), ("previous_value", "previous_value")):
+                    nv = ev.get(key)
+                    if nv is not None and getattr(existing, field) != nv:
+                        setattr(existing, field, nv)
+                        changed = True
                 if changed:
                     updated_count += 1
 
-        if updated_count > 0:
-            db.commit()
-            logger.info(f"Upserted {updated_count} economic calendar events from ForexFactory.")
+        try:
+            if new_rows:
+                db.execute(sa_insert(EconomicEvent).values(new_rows))
+            if updated_count > 0:
+                db.commit()
+                logger.info(f"Upserted {updated_count} economic calendar events from ForexFactory.")
+        except Exception as e:
+            logger.warning(f"Bulk calendar upsert skipped: {e}")
+            db.rollback()
         return updated_count
 
     _last_news_fetch_time: float = 0.0
