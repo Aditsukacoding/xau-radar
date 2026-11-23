@@ -270,8 +270,8 @@ class IngestionService:
             logger.warning(f"[Sync] Calendar ingest skipped after error: {e}")
             db.rollback()
 
-        # 4. Evaluate live status WITHOUT overwriting a locked active/pending setup
-        return await AnalysisService.get_or_generate_analysis(db, symbol=symbol, force_refresh=False)
+        # 4. Done — caller (endpoints_dashboard.trigger_full_live_sync) evaluates & returns locked setup once
+        return None
 
     @staticmethod
     async def ingest_latest_news(db: Session, symbol: str = "XAUUSD") -> int:

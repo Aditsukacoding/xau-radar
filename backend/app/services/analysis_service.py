@@ -349,9 +349,9 @@ class AnalysisService:
                         latest.trade_setup_json = json.dumps(setup)
                         db.commit()
                         return latest
-                    elif age_hours >= 12.0 or (tp2 > 0 and curr_price <= tp2):
+                    elif age_hours >= 12.0 or (tp3 > 0 and curr_price <= tp3 - 15.0) or (entry_p - curr_price) > 45.0:
                         should_regenerate = True
-                        reason = "Pending SELL LIMIT kadaluarsa (>12 jam) atau harga sudah melewati TP2 tanpa menjemput limit."
+                        reason = "Pending SELL LIMIT kadaluarsa (>12 jam) atau harga sudah menjauh ekstrem (>450p / melewati TP3)."
                     else:
                         dist_p = round((entry_p - curr_price) * 10.0, 1)
                         setup["zone_distance_pips"] = max(0.0, dist_p)
@@ -360,8 +360,8 @@ class AnalysisService:
                             f"PATEN • Menunggu harga naik +{dist_p:.0f} pips ke Key Zone {setup.get('entry_zone', f'${entry_p:.2f}')} "
                             f"(terkunci hingga terjemput / SL -${risk_pips_val/10:.1f})"
                         )
+                        # Return updated message in-memory without redundant remote DB UPDATE on plain reload
                         latest.trade_setup_json = json.dumps(setup)
-                        db.commit()
                         return latest
                 elif cur_status == "RUNNING_TP2_HIT":
                     # TP2 already hit -> remaining 20% runner SL locked at TP1
@@ -454,9 +454,9 @@ class AnalysisService:
                         latest.trade_setup_json = json.dumps(setup)
                         db.commit()
                         return latest
-                    elif age_hours >= 12.0 or (tp2 > 0 and curr_price >= tp2):
+                    elif age_hours >= 12.0 or (tp3 > 0 and curr_price >= tp3 + 15.0) or (curr_price - entry_p) > 45.0:
                         should_regenerate = True
-                        reason = "Pending BUY LIMIT kadaluarsa (>12 jam) atau harga sudah melewati TP2 tanpa menjemput limit."
+                        reason = "Pending BUY LIMIT kadaluarsa (>12 jam) atau harga sudah menjauh ekstrem (>450p / melewati TP3)."
                     else:
                         dist_p = round((curr_price - entry_p) * 10.0, 1)
                         setup["zone_distance_pips"] = max(0.0, dist_p)
@@ -465,8 +465,8 @@ class AnalysisService:
                             f"PATEN • Menunggu harga turun -{dist_p:.0f} pips ke Key Zone {setup.get('entry_zone', f'${entry_p:.2f}')} "
                             f"(terkunci hingga terjemput / SL -${risk_pips_val/10:.1f})"
                         )
+                        # Return updated message in-memory without redundant remote DB UPDATE on plain reload
                         latest.trade_setup_json = json.dumps(setup)
-                        db.commit()
                         return latest
                 elif cur_status == "RUNNING_TP2_HIT":
                     if curr_price >= tp3:
