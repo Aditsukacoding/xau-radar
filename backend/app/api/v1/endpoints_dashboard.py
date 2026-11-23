@@ -45,7 +45,19 @@ async def get_dashboard_summary(symbol: str = "XAUUSD", db: Session = Depends(ge
         raise HTTPException(status_code=404, detail=f"Instrument '{symbol}' not found")
 
     provider = get_data_provider()
-    price_info = await provider.get_latest_price(symbol)
+    import asyncio
+
+    async def _safe_intermarket():
+        try:
+            return await MacroIntelligenceService.fetch_intermarket_snapshot()
+        except Exception:
+            return None
+
+    # Fetch live spot price & intermarket snapshot concurrently
+    price_info, intermarket = await asyncio.gather(
+        provider.get_latest_price(symbol),
+        _safe_intermarket(),
+    )
 
     # Latest Analysis Report
     report = await AnalysisService.get_or_generate_analysis(db, symbol=symbol)
@@ -108,12 +120,6 @@ async def get_dashboard_summary(symbol: str = "XAUUSD", db: Session = Depends(ge
 
     trade_setup_raw = json.loads(report.trade_setup_json) if getattr(report, 'trade_setup_json', None) else None
     trade_setup_obj = TradeSetup(**trade_setup_raw) if trade_setup_raw else None
-
-    # Live Intermarket Snapshot (DXY, US10Y Yield, WTI Crude Oil — 3-min cached)
-    try:
-        intermarket = await MacroIntelligenceService.fetch_intermarket_snapshot()
-    except Exception:
-        intermarket = None
 
     return DashboardSummaryResponse(
         symbol=symbol,

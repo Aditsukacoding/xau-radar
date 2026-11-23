@@ -135,18 +135,19 @@ class IngestionService:
         logger.info(f"Syncing real live market data for {symbol}...")
 
         import asyncio
-        tfs = ["15m", "1h", "4h", "1d"]
+        # Sync 15m & 1h recent bars only (4h/1d fetched live on-demand; keeps Neon PostgreSQL sync <3s!)
+        tfs = ["15m", "1h"]
 
         async def _safe(coro, fallback):
             try:
-                return await asyncio.wait_for(coro, timeout=8.0)
+                return await asyncio.wait_for(coro, timeout=6.5)
             except Exception as e:
                 logger.warning(f"[Sync] Live fetch skipped: {e}")
                 return fallback
 
-        # Fetch candles, news & calendar CONCURRENTLY (4x faster on Vercel + Neon!)
+        # Fetch candles, news & calendar CONCURRENTLY
         results = await asyncio.gather(
-            *[_safe(provider.get_price_candles(symbol=symbol, timeframe=tf, count=60), []) for tf in tfs],
+            *[_safe(provider.get_price_candles(symbol=symbol, timeframe=tf, count=25), []) for tf in tfs],
             _safe(provider.get_news_articles(symbol=symbol, limit=15), []),
             _safe(provider.get_economic_calendar(), []),
         )
@@ -159,90 +160,112 @@ class IngestionService:
                 return None
             return dt.astimezone(timezone.utc).replace(tzinfo=None) if getattr(dt, "tzinfo", None) else dt
 
-        # 1. Upsert Candles safely (deduplicated + UniqueConstraint-safe on PostgreSQL)
+        # 1. Upsert ONLY genuinely new or changed Candles (eliminates 200+ no-op UPDATEs on remote PostgreSQL!)
         try:
+            new_candle_dicts = []
+            has_updates = False
             for tf, raw_candles in zip(tfs, tf_candles_list):
                 if not raw_candles:
                     continue
                 existing_rows = (
                     db.query(PriceCandle)
                     .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
+                    .order_by(desc(PriceCandle.timestamp))
+                    .limit(60)
                     .all()
                 )
                 existing_by_ts = {_naive_utc(r.timestamp): r for r in existing_rows}
+                seen_new_ts = set(existing_by_ts.keys())
                 for c in raw_candles:
                     c_key = _naive_utc(c["timestamp"])
                     if c_key is None:
                         continue
                     existing = existing_by_ts.get(c_key)
                     if existing is None:
-                        obj = PriceCandle(
-                            symbol=symbol,
-                            timeframe=tf,
-                            timestamp=c_key,
-                            open=c["open"],
-                            high=c["high"],
-                            low=c["low"],
-                            close=c["close"],
-                            volume=c["volume"],
-                        )
-                        db.add(obj)
-                        existing_by_ts[c_key] = obj
+                        if c_key in seen_new_ts:
+                            continue
+                        seen_new_ts.add(c_key)
+                        new_candle_dicts.append({
+                            "symbol": symbol,
+                            "timeframe": tf,
+                            "timestamp": c_key,
+                            "open": float(c["open"]),
+                            "high": float(c["high"]),
+                            "low": float(c["low"]),
+                            "close": float(c["close"]),
+                            "volume": float(c.get("volume", 0.0) or 0.0),
+                        })
                     else:
-                        existing.close = c["close"]
-                        existing.high = max(existing.high, c["high"])
-                        existing.low = min(existing.low, c["low"])
-            db.commit()
+                        new_h = max(existing.high, float(c["high"]))
+                        new_l = min(existing.low, float(c["low"]))
+                        new_c = float(c["close"])
+                        if abs(existing.close - new_c) >= 0.01 or abs(existing.high - new_h) >= 0.01 or abs(existing.low - new_l) >= 0.01:
+                            existing.close = new_c
+                            existing.high = new_h
+                            existing.low = new_l
+                            has_updates = True
+            if new_candle_dicts:
+                db.bulk_insert_mappings(PriceCandle, new_candle_dicts)
+            if new_candle_dicts or has_updates:
+                db.commit()
         except Exception as e:
             logger.warning(f"[Sync] Candle upsert skipped after error: {e}")
             db.rollback()
 
-        # 2. Ingest News safely (1 bulk SELECT)
+        # 2. Bulk-insert ONLY new News articles (1 SELECT + 1 bulk INSERT)
         try:
             if raw_news:
                 existing_titles = {
-                    row[0] for row in db.query(NewsArticle.title).filter(NewsArticle.symbol == symbol).order_by(desc(NewsArticle.published_at)).limit(150).all()
+                    row[0] for row in db.query(NewsArticle.title).filter(NewsArticle.symbol == symbol).order_by(desc(NewsArticle.published_at)).limit(120).all()
                 }
+                new_news_dicts = []
                 for nw in raw_news:
                     if nw["title"] not in existing_titles:
                         existing_titles.add(nw["title"])
-                        db.add(NewsArticle(
-                            symbol=symbol,
-                            title=nw["title"],
-                            source=nw["source"],
-                            url=nw.get("url"),
-                            summary=nw.get("summary"),
-                            sentiment_label=nw["sentiment_label"],
-                            sentiment_score=nw["sentiment_score"],
-                            published_at=_naive_utc(nw["published_at"]),
-                        ))
-                db.commit()
+                        new_news_dicts.append({
+                            "symbol": symbol,
+                            "title": nw["title"],
+                            "source": nw["source"],
+                            "url": nw.get("url"),
+                            "summary": nw.get("summary"),
+                            "sentiment_label": nw["sentiment_label"],
+                            "sentiment_score": nw["sentiment_score"],
+                            "published_at": _naive_utc(nw["published_at"]),
+                            "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                        })
+                if new_news_dicts:
+                    db.bulk_insert_mappings(NewsArticle, new_news_dicts)
+                    db.commit()
         except Exception as e:
             logger.warning(f"[Sync] News ingest skipped after error: {e}")
             db.rollback()
 
-        # 3. Ingest Calendar safely (1 bulk SELECT)
+        # 3. Bulk-insert ONLY new Calendar events (1 SELECT + 1 bulk INSERT)
         try:
             if raw_events:
                 existing_ext_ids = {
                     row[0] for row in db.query(EconomicEvent.external_id).filter(EconomicEvent.external_id.isnot(None)).all()
                 }
+                new_ev_dicts = []
                 for ev in raw_events:
                     ext_id = ev.get("external_id")
                     if ext_id and ext_id not in existing_ext_ids:
                         existing_ext_ids.add(ext_id)
-                        db.add(EconomicEvent(
-                            external_id=ext_id,
-                            currency=ev["currency"],
-                            event_title=ev["event_title"],
-                            impact_level=ev["impact_level"],
-                            scheduled_at=_naive_utc(ev["scheduled_at"]),
-                            actual_value=ev.get("actual_value"),
-                            forecast_value=ev.get("forecast_value"),
-                            previous_value=ev.get("previous_value"),
-                            sentiment_impact=ev.get("sentiment_impact"),
-                        ))
-                db.commit()
+                        new_ev_dicts.append({
+                            "external_id": ext_id,
+                            "currency": ev["currency"],
+                            "event_title": ev["event_title"],
+                            "impact_level": ev["impact_level"],
+                            "scheduled_at": _naive_utc(ev["scheduled_at"]),
+                            "actual_value": ev.get("actual_value"),
+                            "forecast_value": ev.get("forecast_value"),
+                            "previous_value": ev.get("previous_value"),
+                            "sentiment_impact": ev.get("sentiment_impact"),
+                            "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                        })
+                if new_ev_dicts:
+                    db.bulk_insert_mappings(EconomicEvent, new_ev_dicts)
+                    db.commit()
         except Exception as e:
             logger.warning(f"[Sync] Calendar ingest skipped after error: {e}")
             db.rollback()
