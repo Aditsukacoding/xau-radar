@@ -22,21 +22,24 @@ class IngestionService:
         """
         provider = get_data_provider()
 
-        # 1. Seed Instrument
+        # Fast path for permanent PostgreSQL (Neon/Supabase): if XAUUSD instrument already exists,
+        # the database is already seeded — skip 5 extra COUNT(*) round-trips on every serverless cold start!
         xau = db.query(Instrument).filter(Instrument.symbol == "XAUUSD").first()
-        if not xau:
-            logger.info("Seeding default instrument XAUUSD...")
-            xau = Instrument(
-                symbol="XAUUSD",
-                name="Gold vs US Dollar",
-                category="commodity",
-                base_currency="XAU",
-                quote_currency="USD",
-                pip_decimal=2,
-                is_active=True,
-            )
-            db.add(xau)
-            db.commit()
+        if xau:
+            return
+
+        logger.info("Seeding default instrument XAUUSD...")
+        xau = Instrument(
+            symbol="XAUUSD",
+            name="Gold vs US Dollar",
+            category="commodity",
+            base_currency="XAU",
+            quote_currency="USD",
+            pip_decimal=2,
+            is_active=True,
+        )
+        db.add(xau)
+        db.commit()
 
         # 2. Seed Economic Events
         try:
@@ -160,23 +163,25 @@ class IngestionService:
                 return None
             return dt.astimezone(timezone.utc).replace(tzinfo=None) if getattr(dt, "tzinfo", None) else dt
 
-        # 1. Upsert ONLY genuinely new or changed Candles (eliminates 200+ no-op UPDATEs on remote PostgreSQL!)
+        # 1. Upsert ONLY genuinely new or changed Candles using a SINGLE multi-row INSERT (1 TCP round-trip on pg8000!)
+        from sqlalchemy import insert as sa_insert
         try:
             new_candle_dicts = []
             has_updates = False
             for tf, raw_candles in zip(tfs, tf_candles_list):
                 if not raw_candles:
                     continue
+                recent_raw = raw_candles[-15:]
                 existing_rows = (
                     db.query(PriceCandle)
                     .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
                     .order_by(desc(PriceCandle.timestamp))
-                    .limit(60)
+                    .limit(40)
                     .all()
                 )
                 existing_by_ts = {_naive_utc(r.timestamp): r for r in existing_rows}
                 seen_new_ts = set(existing_by_ts.keys())
-                for c in raw_candles:
+                for c in recent_raw:
                     c_key = _naive_utc(c["timestamp"])
                     if c_key is None:
                         continue
@@ -199,20 +204,20 @@ class IngestionService:
                         new_h = max(existing.high, float(c["high"]))
                         new_l = min(existing.low, float(c["low"]))
                         new_c = float(c["close"])
-                        if abs(existing.close - new_c) >= 0.01 or abs(existing.high - new_h) >= 0.01 or abs(existing.low - new_l) >= 0.01:
+                        if abs(existing.close - new_c) >= 0.05 or abs(existing.high - new_h) >= 0.05 or abs(existing.low - new_l) >= 0.05:
                             existing.close = new_c
                             existing.high = new_h
                             existing.low = new_l
                             has_updates = True
             if new_candle_dicts:
-                db.bulk_insert_mappings(PriceCandle, new_candle_dicts)
+                db.execute(sa_insert(PriceCandle).values(new_candle_dicts))
             if new_candle_dicts or has_updates:
                 db.commit()
         except Exception as e:
             logger.warning(f"[Sync] Candle upsert skipped after error: {e}")
             db.rollback()
 
-        # 2. Bulk-insert ONLY new News articles (1 SELECT + 1 bulk INSERT)
+        # 2. Single multi-row INSERT for new News articles (1 SELECT + 1 INSERT)
         try:
             if raw_news:
                 existing_titles = {
@@ -234,13 +239,13 @@ class IngestionService:
                             "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
                         })
                 if new_news_dicts:
-                    db.bulk_insert_mappings(NewsArticle, new_news_dicts)
+                    db.execute(sa_insert(NewsArticle).values(new_news_dicts))
                     db.commit()
         except Exception as e:
             logger.warning(f"[Sync] News ingest skipped after error: {e}")
             db.rollback()
 
-        # 3. Bulk-insert ONLY new Calendar events (1 SELECT + 1 bulk INSERT)
+        # 3. Single multi-row INSERT for new Calendar events (1 SELECT + 1 INSERT)
         try:
             if raw_events:
                 existing_ext_ids = {
@@ -264,7 +269,7 @@ class IngestionService:
                             "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
                         })
                 if new_ev_dicts:
-                    db.bulk_insert_mappings(EconomicEvent, new_ev_dicts)
+                    db.execute(sa_insert(EconomicEvent).values(new_ev_dicts))
                     db.commit()
         except Exception as e:
             logger.warning(f"[Sync] Calendar ingest skipped after error: {e}")

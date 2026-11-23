@@ -160,5 +160,12 @@ async def trigger_full_live_sync(symbol: str = "XAUUSD", db: Session = Depends(g
     - Ingests fresh global financial news
     - Synthesizes fresh AI market bias report
     """
-    await IngestionService.sync_live_market_data(db, symbol=symbol.upper())
+    import asyncio
+    try:
+        await asyncio.wait_for(
+            IngestionService.sync_live_market_data(db, symbol=symbol.upper()),
+            timeout=12.0,
+        )
+    except Exception:
+        pass
     return await get_dashboard_summary(symbol=symbol, db=db)

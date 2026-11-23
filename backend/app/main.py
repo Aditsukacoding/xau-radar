@@ -85,21 +85,27 @@ async def _background_auto_ingestion_loop():
 
 
 
+_DB_BOOTSTRAPPED = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Initialize database tables
-    logger.info("Initializing database tables...")
-    Base.metadata.create_all(bind=engine)
+    global _DB_BOOTSTRAPPED
+    if not _DB_BOOTSTRAPPED:
+        # 1. Initialize database tables once per container
+        logger.info("Initializing database tables...")
+        Base.metadata.create_all(bind=engine)
 
-    # 2. Seed initial data for XAUUSD if database is newly created
-    db = SessionLocal()
-    try:
-        await IngestionService.seed_initial_data_if_empty(db)
-        logger.info("Database initialized and verified successfully.")
-    except Exception as e:
-        logger.error(f"Error during database startup seed: {e}")
-    finally:
-        db.close()
+        # 2. Seed initial data for XAUUSD only if database is brand new
+        db = SessionLocal()
+        try:
+            await IngestionService.seed_initial_data_if_empty(db)
+            logger.info("Database initialized and verified successfully.")
+        except Exception as e:
+            logger.error(f"Error during database startup seed: {e}")
+        finally:
+            db.close()
+        _DB_BOOTSTRAPPED = True
 
     # 3. Start continuous sub-second live price tick worker & background ingestion daemon
     # (Only active in standalone ASGI/Uvicorn mode; disabled in serverless/WSGI to avoid thread hangs)
