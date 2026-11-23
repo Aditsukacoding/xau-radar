@@ -31,8 +31,8 @@ class _FundamentalScreenState extends State<FundamentalScreen> {
   void initState() {
     super.initState();
     _loadEvents();
-    // Continuous 25-second background auto-poll to capture real-time released actuals
-    _autoPollTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+    // Lightweight 90-second background poll to capture newly released actuals
+    _autoPollTimer = Timer.periodic(const Duration(seconds: 90), (_) {
       _loadEvents(silent: true);
     });
   }

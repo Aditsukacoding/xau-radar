@@ -51,8 +51,8 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
     _livePricePollTimer?.cancel();
     _indicatorsAutoSyncTimer?.cancel();
 
-    // 1. Continuous genuine market tick poll from FOREX.com every 700ms (High-frequency sub-second)
-    _livePricePollTimer = Timer.periodic(const Duration(milliseconds: 700), (timer) async {
+    // 1. Live spot tick every 5s (smooth on mobile & web)
+    _livePricePollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       if (!mounted || _isPollingTick) return;
       _isPollingTick = true;
       try {
@@ -67,8 +67,8 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
       }
     });
 
-    // 2. Periodic background silent sync of indicators & candles every 15s
-    _indicatorsAutoSyncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    // 2. Periodic background silent sync of indicators & candles every 60s
+    _indicatorsAutoSyncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       _loadTechnicalData(silent: true);
     });
   }

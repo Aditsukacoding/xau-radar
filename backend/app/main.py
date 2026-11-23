@@ -92,19 +92,28 @@ _DB_BOOTSTRAPPED = False
 async def lifespan(app: FastAPI):
     global _DB_BOOTSTRAPPED
     if not _DB_BOOTSTRAPPED:
-        # 1. Initialize database tables once per container
-        logger.info("Initializing database tables...")
-        Base.metadata.create_all(bind=engine)
-
-        # 2. Seed initial data for XAUUSD only if database is brand new
-        db = SessionLocal()
+        # Fast 1-query check: if Neon PostgreSQL is already initialized, skip expensive DDL create_all!
+        needs_bootstrap = False
         try:
-            await IngestionService.seed_initial_data_if_empty(db)
-            logger.info("Database initialized and verified successfully.")
-        except Exception as e:
-            logger.error(f"Error during database startup seed: {e}")
-        finally:
-            db.close()
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                row = conn.execute(text("SELECT 1 FROM instruments LIMIT 1")).first()
+                if not row:
+                    needs_bootstrap = True
+        except Exception:
+            needs_bootstrap = True
+
+        if needs_bootstrap:
+            logger.info("Initializing database tables...")
+            Base.metadata.create_all(bind=engine)
+            db = SessionLocal()
+            try:
+                await IngestionService.seed_initial_data_if_empty(db)
+                logger.info("Database initialized and verified successfully.")
+            except Exception as e:
+                logger.error(f"Error during database startup seed: {e}")
+            finally:
+                db.close()
         _DB_BOOTSTRAPPED = True
 
     # 3. Start continuous sub-second live price tick worker & background ingestion daemon

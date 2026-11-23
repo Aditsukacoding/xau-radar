@@ -63,18 +63,28 @@ def _build_engine(db_url: str):
             urllib.parse.urlencode(clean_q),
             "",
         ))
-        c_args = {}
+        c_args = {"timeout": 8}
         if ssl_requested:
             ssl_ctx = ssl.create_default_context()
             c_args["ssl_context"] = ssl_ctx
+
+        # On Vercel Serverless, NullPool prevents idle lambdas from holding/exhausting Neon connections
+        if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+            from sqlalchemy.pool import NullPool
+            return create_engine(
+                pg_url,
+                connect_args=c_args,
+                poolclass=NullPool,
+                echo=False,
+            )
 
         return create_engine(
             pg_url,
             connect_args=c_args,
             pool_pre_ping=True,
             pool_recycle=300,
-            pool_size=3,
-            max_overflow=5,
+            pool_size=2,
+            max_overflow=3,
             echo=False,
         )
     except Exception as e:

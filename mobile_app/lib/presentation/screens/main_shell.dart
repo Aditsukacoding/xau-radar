@@ -24,30 +24,12 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
-  DateTime _now = DateTime.now();
-  Timer? _clockTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _clockTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) {
-        setState(() {
-          _now = DateTime.now();
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _clockTimer?.cancel();
-    super.dispose();
-  }
+  final Set<int> _visitedTabs = {0};
 
   void _onTabSelected(int index) {
     setState(() {
       _currentIndex = index;
+      _visitedTabs.add(index);
     });
   }
 
@@ -200,18 +182,17 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Lazy-mount tabs on first visit so hidden screens (and TradingView iframe) never burn CPU or API calls on startup!
     final List<Widget> screens = [
       DashboardScreen(
         onNavigateTab: _onTabSelected,
         onOpenSettings: _showServerSettingsDialog,
       ),
-      const FundamentalScreen(),
-      const GeopoliticalScreen(),
-      const TechnicalScreen(),
-      const HistoryScreen(),
+      _visitedTabs.contains(1) ? const FundamentalScreen() : const SizedBox.shrink(),
+      _visitedTabs.contains(2) ? const GeopoliticalScreen() : const SizedBox.shrink(),
+      _visitedTabs.contains(3) ? const TechnicalScreen() : const SizedBox.shrink(),
+      _visitedTabs.contains(4) ? const HistoryScreen() : const SizedBox.shrink(),
     ];
-
-    final wibTimeShort = _now.formatWibTime(withSeconds: false).replaceAll(' WIB', '');
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -302,45 +283,8 @@ class _MainShellState extends State<MainShell> {
           ),
         ),
         actions: [
-          // Clean WIB • LIVE Status Pill
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.border, width: 0.8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: AppColors.bullish,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.bullish.withValues(alpha: 0.7),
-                          blurRadius: 5,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '$wibTimeShort WIB',
-                    style: AppTypography.mono(
-                      color: AppColors.textSecondary,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          // Isolated WIB Clock Pill (ticks cleanly without rebuilding MainShell or tabs)
+          const Center(child: _WibClockPill()),
           const SizedBox(width: 8),
           // Minimalist Settings / Profile Action Button (44x44pt Apple HIG touch target)
           Padding(
@@ -403,36 +347,98 @@ class _IosTabBar extends StatelessWidget {
     final isMobile = mediaQuery.size.width < 768;
     final double safeBottom = isMobile ? max(rawBottom, 28.0) : (rawBottom > 0 ? rawBottom : 10.0);
 
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xE008090C),
-            border: Border(
-              top: BorderSide(
-                color: AppColors.border,
-                width: 0.8,
-              ),
-            ),
-          ),
-          height: 54.0 + safeBottom,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: List.generate(_tabs.length, (i) {
-              final tab = _tabs[i];
-              final selected = i == currentIndex;
-              return Expanded(
-                child: _IosTabItemWidget(
-                  tab: tab,
-                  selected: selected,
-                  safeBottom: safeBottom,
-                  onTap: () => onTap(i),
-                ),
-              );
-            }),
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xF708090C),
+        border: Border(
+          top: BorderSide(
+            color: AppColors.border,
+            width: 0.8,
           ),
         ),
+      ),
+      height: 54.0 + safeBottom,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: List.generate(_tabs.length, (i) {
+          final tab = _tabs[i];
+          final selected = i == currentIndex;
+          return Expanded(
+            child: _IosTabItemWidget(
+              tab: tab,
+              selected: selected,
+              safeBottom: safeBottom,
+              onTap: () => onTap(i),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _WibClockPill extends StatefulWidget {
+  const _WibClockPill();
+
+  @override
+  State<_WibClockPill> createState() => _WibClockPillState();
+}
+
+class _WibClockPillState extends State<_WibClockPill> {
+  DateTime _now = DateTime.now();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final wibTimeShort = _now.formatWibTime(withSeconds: false).replaceAll(' WIB', '');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border, width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: AppColors.bullish,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.bullish.withValues(alpha: 0.7),
+                  blurRadius: 5,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            '$wibTimeShort WIB',
+            style: AppTypography.mono(
+              color: AppColors.textSecondary,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

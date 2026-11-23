@@ -49,12 +49,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
-    // 1. High-frequency live tick poll every 700ms
-    _liveTickerTimer = Timer.periodic(const Duration(milliseconds: 700), (_) {
+    // 1. Live spot tick every 5s (smooth & lightweight — avoids hammering Vercel/Neon & browser GPU)
+    _liveTickerTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _pollLivePriceSilently();
     });
-    // 2. Background silent auto-sync of AI bias & headlines every 20s
-    _dashboardAutoSyncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    // 2. Background silent sync of locked setup status & headlines every 60s
+    _dashboardAutoSyncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       _loadDashboardData(silent: true);
     });
   }

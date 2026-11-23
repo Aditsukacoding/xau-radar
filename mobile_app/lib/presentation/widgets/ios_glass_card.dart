@@ -1,8 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 
-class IosGlassCard extends StatefulWidget {
+/// High-performance Obsidian & Gold iOS 18 glass card.
+/// Uses crisp layered gradients & subtle glow borders without per-card BackdropFilter
+/// (eliminating heavy WebGL/CanvasKit blur passes during scroll for smooth 60fps).
+class IosGlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final EdgeInsetsGeometry margin;
@@ -23,94 +25,81 @@ class IosGlassCard extends StatefulWidget {
   });
 
   @override
-  State<IosGlassCard> createState() => _IosGlassCardState();
+  Widget build(BuildContext context) {
+    final card = RepaintBoundary(
+      child: Container(
+        margin: margin,
+        padding: padding,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF141822),
+              Color(0xFF10131B),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(borderRadius),
+          border: Border.all(
+            color: borderColor ?? AppColors.border,
+            width: 0.85,
+          ),
+          boxShadow: [
+            if (glowColor != null)
+              BoxShadow(
+                color: glowColor!.withValues(alpha: 0.10),
+                blurRadius: 20,
+                spreadRadius: -2,
+                offset: const Offset(0, 5),
+              )
+            else
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.42),
+                blurRadius: 14,
+                spreadRadius: -3,
+                offset: const Offset(0, 6),
+              ),
+          ],
+        ),
+        child: child,
+      ),
+    );
+
+    if (onTap == null) return card;
+
+    return _TappableScaleCard(onTap: onTap!, child: card);
+  }
 }
 
-class _IosGlassCardState extends State<IosGlassCard> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
+class _TappableScaleCard extends StatefulWidget {
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _TappableScaleCard({required this.onTap, required this.child});
 
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 110),
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.985).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
-  }
+  State<_TappableScaleCard> createState() => _TappableScaleCardState();
+}
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+class _TappableScaleCardState extends State<_TappableScaleCard> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    Widget content = Container(
-      margin: widget.margin,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(widget.borderRadius),
-        boxShadow: [
-          if (widget.glowColor != null)
-            BoxShadow(
-              color: widget.glowColor!.withValues(alpha: 0.10),
-              blurRadius: 28,
-              spreadRadius: -2,
-              offset: const Offset(0, 6),
-            )
-          else
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 20,
-              spreadRadius: -4,
-              offset: const Offset(0, 8),
-            ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(widget.borderRadius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            padding: widget.padding,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xF5141822),
-                  Color(0xFA10131B),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(widget.borderRadius),
-              border: Border.all(
-                color: widget.borderColor ?? AppColors.border,
-                width: 0.85,
-              ),
-            ),
-            child: widget.child,
-          ),
-        ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.985 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
       ),
     );
-
-    if (widget.onTap != null) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => _controller.forward(),
-        onTapUp: (_) {
-          _controller.reverse();
-          widget.onTap!();
-        },
-        onTapCancel: () => _controller.reverse(),
-        child: ScaleTransition(scale: _scaleAnimation, child: content),
-      );
-    }
-
-    return content;
   }
 }

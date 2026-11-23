@@ -28,9 +28,8 @@ class _GeopoliticalScreenState extends State<GeopoliticalScreen> {
   void initState() {
     super.initState();
     _loadNews();
-    // Ultra-responsive 15-second continuous background auto-poll
-    // Immediately ingests and displays any new breaking news
-    _autoPollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    // Lightweight 60-second background auto-poll for fresh breaking news
+    _autoPollTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       _loadNews(silent: true);
     });
   }
