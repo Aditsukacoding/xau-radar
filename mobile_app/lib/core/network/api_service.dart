@@ -46,18 +46,29 @@ class ApiService {
     baseUrl = newUrl;
   }
 
-  static const Duration _defaultTimeout = Duration(seconds: 12);
+  static const Duration _defaultTimeout = Duration(seconds: 28);
 
-  // 1. Dashboard Summary
+  // 1. Dashboard Summary (with 1 automatic retry for Vercel + Neon serverless cold starts)
   Future<DashboardSummaryModel> getDashboardSummary({String symbol = 'XAUUSD'}) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/dashboard/summary/$symbol'))
-        .timeout(_defaultTimeout);
-    if (response.statusCode == 200) {
-      return DashboardSummaryModel.fromJson(json.decode(response.body));
-    } else {
-      throw Exception('Gagal memuat ringkasan dashboard: ${response.statusCode}');
+    Object? lastErr;
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        final response = await http
+            .get(Uri.parse('$baseUrl/dashboard/summary/$symbol'))
+            .timeout(_defaultTimeout);
+        if (response.statusCode == 200) {
+          return DashboardSummaryModel.fromJson(json.decode(response.body));
+        }
+        lastErr = Exception('Gagal memuat ringkasan dashboard: ${response.statusCode}');
+        if (response.statusCode < 500) break;
+      } catch (e) {
+        lastErr = e;
+      }
+      if (attempt == 0) {
+        await Future.delayed(const Duration(milliseconds: 800));
+      }
     }
+    throw lastErr ?? Exception('Gagal terhubung ke server dashboard');
   }
 
   // 2. Economic Calendar
@@ -168,7 +179,7 @@ class ApiService {
   Future<DashboardSummaryModel> triggerFullLiveSync({String symbol = 'XAUUSD'}) async {
     final response = await http
         .post(Uri.parse('$baseUrl/dashboard/sync/$symbol'))
-        .timeout(const Duration(seconds: 20));
+        .timeout(const Duration(seconds: 35));
     if (response.statusCode == 200) {
       return DashboardSummaryModel.fromJson(json.decode(response.body));
     } else {
@@ -233,7 +244,7 @@ class ApiService {
     int limit = 40,
   }) async {
     final url = '$baseUrl/signals/history/$symbol?action=$action&outcome=$outcome&limit=$limit';
-    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
+    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
     if (response.statusCode == 200) {
       return SignalHistoryResponseModel.fromJson(json.decode(response.body));
     } else {
@@ -245,7 +256,7 @@ class ApiService {
   Future<SignalHistoryResponseModel> refreshSignalHistory({String symbol = 'XAUUSD'}) async {
     final response = await http
         .post(Uri.parse('$baseUrl/signals/refresh/$symbol'))
-        .timeout(const Duration(seconds: 20));
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode == 200) {
       return SignalHistoryResponseModel.fromJson(json.decode(response.body));
     } else {
