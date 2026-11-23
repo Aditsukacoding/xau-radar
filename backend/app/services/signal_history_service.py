@@ -393,7 +393,7 @@ class SignalHistoryService:
 
         now_utc = _to_utc(created_at) or datetime.now(timezone.utc)
 
-        # Strict single-active-signal rule: never stack overlapping open LIVE signals
+        # Strict single-active-signal rule synced 1-to-1 with Dashboard's locked setup
         existing_open = (
             db.query(TradeSignalHistory)
             .filter(
@@ -405,7 +405,19 @@ class SignalHistoryService:
             .first()
         )
         if existing_open:
-            return existing_open
+            same_setup = (
+                existing_open.action == action
+                and abs(existing_open.entry_price - entry_p) <= 1.00
+                and abs(existing_open.stop_loss - sl) <= 1.00
+            )
+            if same_setup:
+                return existing_open
+            # If the old open row was already triggered (ACTIVE/TP1/TP2), never overwrite it!
+            if existing_open.outcome != "PENDING_LIMIT" or existing_open.triggered_at is not None:
+                return existing_open
+            # Otherwise it was an unfilled superseded PENDING_LIMIT — replace it cleanly so Ledger matches Dashboard 1-to-1
+            db.delete(existing_open)
+            db.commit()
 
         exec_type = str(trade_setup.get("execution_type", "LIMIT")).upper()
         init_outcome = "ACTIVE" if exec_type == "INSTANT" else "PENDING_LIMIT"
@@ -812,26 +824,20 @@ class SignalHistoryService:
         if legacy_audit:
             db.commit()
 
-        # 1b. Mirror the current active Dashboard setup into LIVE ledger if none exists yet
-        has_live = (
-            db.query(TradeSignalHistory)
-            .filter(TradeSignalHistory.symbol == sym, TradeSignalHistory.source_type == "LIVE")
-            .count()
-        )
-        if has_live == 0:
-            try:
-                import json
-                from app.models.analysis_report import AnalysisReport
-                latest_rep = (
-                    db.query(AnalysisReport)
-                    .filter(AnalysisReport.symbol == sym)
-                    .order_by(desc(AnalysisReport.created_at))
-                    .first()
-                )
-                if latest_rep and latest_rep.trade_setup_json:
-                    cls.record_live_signal(db, sym, json.loads(latest_rep.trade_setup_json), latest_rep.created_at)
-            except Exception:
-                pass
+        # 1b. Keep LIVE ledger synced 1-to-1 with the current locked Dashboard setup
+        try:
+            import json
+            from app.models.analysis_report import AnalysisReport
+            latest_rep = (
+                db.query(AnalysisReport)
+                .filter(AnalysisReport.symbol == sym)
+                .order_by(desc(AnalysisReport.created_at))
+                .first()
+            )
+            if latest_rep and latest_rep.trade_setup_json:
+                cls.record_live_signal(db, sym, json.loads(latest_rep.trade_setup_json), latest_rep.created_at)
+        except Exception:
+            pass
 
         # 2. Re-evaluate open LIVE signal against latest 15m candles + spot price
         await cls.evaluate_open_signals(db, sym, curr_price=curr_price, force=True)
