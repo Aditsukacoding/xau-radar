@@ -263,4 +263,16 @@ class ApiService {
       throw Exception('Gagal memperbarui riwayat entry: ${response.statusCode}');
     }
   }
+
+  // 16. Reset Signal History (Start Clean From 0)
+  Future<SignalHistoryResponseModel> resetSignalHistory({String symbol = 'XAUUSD'}) async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/signals/reset/$symbol'))
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) {
+      return SignalHistoryResponseModel.fromJson(json.decode(response.body));
+    } else {
+      throw Exception('Gagal mengosongkan riwayat entry: ${response.statusCode}');
+    }
+  }
 }

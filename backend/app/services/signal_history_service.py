@@ -393,18 +393,37 @@ class SignalHistoryService:
             return None
 
         now_utc = _to_utc(created_at) or datetime.now(timezone.utc)
+        sym = symbol.upper()
 
-        # Strict single-active-signal rule synced 1-to-1 with Dashboard's locked setup
-        existing_open = (
+        # Layer 1 Bulletproof Anti-Duplicate Guard (checks BOTH open AND already-closed LIVE rows!)
+        # Prevents re-inserting an already-closed AnalysisReport when Riwayat is reloaded before Dashboard refreshes.
+        recent_rows = (
             db.query(TradeSignalHistory)
             .filter(
-                TradeSignalHistory.symbol == symbol.upper(),
+                TradeSignalHistory.symbol == sym,
                 TradeSignalHistory.source_type == "LIVE",
-                TradeSignalHistory.is_closed == False,
             )
             .order_by(desc(TradeSignalHistory.created_at))
-            .first()
+            .limit(20)
+            .all()
         )
+        for existing in recent_rows:
+            same_prices = (
+                existing.action == action
+                and abs(existing.entry_price - entry_p) <= 0.60
+                and abs(existing.stop_loss - sl) <= 0.60
+            )
+            if not same_prices:
+                continue
+            ex_utc = _to_utc(existing.created_at)
+            if ex_utc is not None:
+                dt_sec = abs((now_utc - ex_utc).total_seconds())
+                # Exact same AnalysisReport timestamp (within 3 min) OR already closed same setup within 24h -> NEVER clone!
+                if dt_sec <= 180.0 or (existing.is_closed and dt_sec <= 86400.0):
+                    return existing
+
+        # Strict single-active-signal rule synced 1-to-1 with Dashboard's locked setup
+        existing_open = next((r for r in recent_rows if not r.is_closed), None)
         if existing_open:
             same_setup = (
                 existing_open.action == action
@@ -463,53 +482,98 @@ class SignalHistoryService:
     @classmethod
     def _cleanup_duplicate_open_signals(cls, db: Session, symbol: str) -> int:
         """
-        If concurrent serverless cold starts created >1 unclosed LIVE signals simultaneously,
-        keeps ONLY the single open row matching the current locked AnalysisReport (or latest 1)
-        and removes duplicate unclosed rows. Never touches closed SL/TP history!
+        Cleans BOTH:
+          1. Duplicate accidental clones (same action, entry_price, stop_loss & created_at within 3 min),
+             keeping only the earliest original row (lowest id).
+          2. Multiple concurrent unclosed LIVE rows (keeps only the single row matching locked AnalysisReport).
         """
         sym = symbol.upper()
-        open_rows = (
+        all_live = (
             db.query(TradeSignalHistory)
             .filter(
                 TradeSignalHistory.symbol == sym,
                 TradeSignalHistory.source_type == "LIVE",
-                TradeSignalHistory.is_closed == False,
             )
-            .order_by(desc(TradeSignalHistory.created_at))
+            .order_by(TradeSignalHistory.id.asc())
             .all()
         )
-        if len(open_rows) <= 1:
-            return 0
-
-        keep_id = open_rows[0].id
-        try:
-            import json
-            from app.models.analysis_report import AnalysisReport
-            latest_rep = (
-                db.query(AnalysisReport)
-                .filter(AnalysisReport.symbol == sym)
-                .order_by(desc(AnalysisReport.created_at))
-                .first()
-            )
-            if latest_rep and latest_rep.trade_setup_json:
-                active_ts = json.loads(latest_rep.trade_setup_json)
-                act_entry = float(active_ts.get("entry_price") or 0.0)
-                act_sl = float(active_ts.get("stop_loss") or 0.0)
-                for row in open_rows:
-                    if abs(row.entry_price - act_entry) <= 0.50 and abs(row.stop_loss - act_sl) <= 0.50:
-                        keep_id = row.id
-                        break
-        except Exception:
-            pass
-
         removed = 0
-        for row in open_rows:
-            if row.id != keep_id:
+        kept_fingerprints: List[Tuple[str, float, float, Optional[datetime]]] = []
+        surviving_open: List[TradeSignalHistory] = []
+
+        for row in all_live:
+            r_utc = _to_utc(row.created_at)
+            is_clone = False
+            for fp_act, fp_entry, fp_sl, fp_ts in kept_fingerprints:
+                if (
+                    row.action == fp_act
+                    and abs(row.entry_price - fp_entry) <= 0.60
+                    and abs(row.stop_loss - fp_sl) <= 0.60
+                    and r_utc is not None
+                    and fp_ts is not None
+                    and abs((r_utc - fp_ts).total_seconds()) <= 180.0
+                ):
+                    is_clone = True
+                    break
+            if is_clone:
                 db.delete(row)
                 removed += 1
+            else:
+                kept_fingerprints.append((row.action, row.entry_price, row.stop_loss, r_utc))
+                if not row.is_closed:
+                    surviving_open.append(row)
+
+        if len(surviving_open) > 1:
+            surviving_open.sort(
+                key=lambda x: (_to_utc(x.created_at) or datetime.min.replace(tzinfo=timezone.utc)).timestamp(),
+                reverse=True,
+            )
+            keep_id = surviving_open[0].id
+            try:
+                import json
+                from app.models.analysis_report import AnalysisReport
+                latest_rep = (
+                    db.query(AnalysisReport)
+                    .filter(AnalysisReport.symbol == sym)
+                    .order_by(desc(AnalysisReport.created_at))
+                    .first()
+                )
+                if latest_rep and latest_rep.trade_setup_json:
+                    active_ts = json.loads(latest_rep.trade_setup_json)
+                    act_entry = float(active_ts.get("entry_price") or 0.0)
+                    act_sl = float(active_ts.get("stop_loss") or 0.0)
+                    for row in surviving_open:
+                        if abs(row.entry_price - act_entry) <= 0.50 and abs(row.stop_loss - act_sl) <= 0.50:
+                            keep_id = row.id
+                            break
+            except Exception:
+                pass
+            for row in surviving_open:
+                if row.id != keep_id:
+                    db.delete(row)
+                    removed += 1
+
         if removed:
             db.commit()
         return removed
+
+    @classmethod
+    def reset_history(cls, db: Session, symbol: str = "XAUUSD") -> int:
+        """
+        Cleanly clears the LIVE signal ledger AND invalidates stale AnalysisReports for `symbol`
+        so tracking restarts fresh from 0W/0L without ghost re-imports of old closed reports.
+        """
+        from app.models.analysis_report import AnalysisReport
+        sym = symbol.upper()
+        deleted_sigs = (
+            db.query(TradeSignalHistory)
+            .filter(TradeSignalHistory.symbol == sym)
+            .delete(synchronize_session=False)
+        )
+        db.query(AnalysisReport).filter(AnalysisReport.symbol == sym).delete(synchronize_session=False)
+        db.commit()
+        cls._last_eval_ts.pop(sym, None)
+        return int(deleted_sigs or 0)
 
     @classmethod
     async def evaluate_open_signals(

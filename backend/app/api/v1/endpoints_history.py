@@ -42,3 +42,19 @@ async def refresh_signal_history(
         outcome_filter="ALL",
         limit=40,
     )
+
+
+@router.post("/reset/{symbol}", response_model=SignalHistoryResponse)
+async def reset_signal_history(
+    symbol: str = "XAUUSD",
+    db: Session = Depends(get_db),
+):
+    """Clears all signal history & stale locked reports for `symbol` so tracking starts cleanly from 0."""
+    SignalHistoryService.reset_history(db=db, symbol=symbol.upper())
+    return await SignalHistoryService.get_history_response(
+        db=db,
+        symbol=symbol.upper(),
+        action_filter="ALL",
+        outcome_filter="ALL",
+        limit=40,
+    )

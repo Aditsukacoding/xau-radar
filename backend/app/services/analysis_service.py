@@ -311,8 +311,38 @@ class AnalysisService:
             reason = ""
 
             # --- 0. CHECK REAL CANDLE LEDGER FIRST (CATCHES INTRA-BAR SL/TP HITS BETWEEN RELOADS) ---
+            ledger_closed_reason = ""
             try:
                 await SignalHistoryService.evaluate_open_signals(db, symbol, curr_price=curr_price)
+                if action in ("BUY", "SELL") and entry_p > 0 and sl > 0:
+                    from app.models.trade_signal_history import TradeSignalHistory
+                    recent_ledgers = (
+                        db.query(TradeSignalHistory)
+                        .filter(
+                            TradeSignalHistory.symbol == symbol.upper(),
+                            TradeSignalHistory.source_type == "LIVE",
+                        )
+                        .order_by(desc(TradeSignalHistory.created_at))
+                        .limit(5)
+                        .all()
+                    )
+                    for lr in recent_ledgers:
+                        lr_created = lr.created_at
+                        if lr_created and lr_created.tzinfo is None:
+                            lr_created = lr_created.replace(tzinfo=timezone.utc)
+                        if (
+                            lr.action == action
+                            and abs(lr.entry_price - entry_p) <= 0.60
+                            and abs(lr.stop_loss - sl) <= 0.60
+                            and lr_created is not None
+                            and abs((created - lr_created).total_seconds()) <= 180.0
+                        ):
+                            if lr.is_closed:
+                                ledger_closed_reason = (
+                                    f"Setup terkunci sebelumnya sudah selesai di candle M15 asli "
+                                    f"({lr.outcome} {lr.realized_pips:+.0f}p) — membuka setup baru."
+                                )
+                            break
             except Exception as e:
                 logger.debug(f"[TradeSetupLifecycle] Ledger sync skipped: {e}")
 
@@ -321,7 +351,10 @@ class AnalysisService:
             tp1_pips_val = float(setup.get("reward_tp1_pips", 0.0) or 0.0)
             exec_type = str(setup.get("execution_type", "INSTANT")).upper()
             cur_status = str(setup.get("status", "ACTIVE")).upper()
-            if (
+            if ledger_closed_reason:
+                should_regenerate = True
+                reason = ledger_closed_reason
+            elif (
                 tp3 <= 0
                 or entry_p <= 0
                 or sl <= 0

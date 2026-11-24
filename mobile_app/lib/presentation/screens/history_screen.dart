@@ -88,6 +88,60 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  Future<void> _confirmResetHistory() async {
+    if (_isSyncing) return;
+    final bool? confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Kosongkan Riwayat Entry?'),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text(
+            'Semua catatan SL/TP lama akan dihapus agar tracking dimulai bersih dari awal (0W / 0L).',
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Kosongkan'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSyncing = true);
+    try {
+      final res = await _api.resetSignalHistory(symbol: 'XAUUSD');
+      if (mounted) {
+        setState(() {
+          _data = res;
+          _expandedIds.clear();
+          _isLoading = false;
+        });
+        ModernToast.showSuccess(
+          context,
+          'Riwayat dikosongkan. Sistem siap mencatat sinyal LIVE baru dari awal.',
+          title: 'Riwayat Direset',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ModernToast.showError(
+          context,
+          'Gagal mereset riwayat: ${e.toString().replaceFirst('Exception: ', '')}',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -156,6 +210,34 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ],
               ),
             ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _confirmResetHistory,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6.5),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.bearish.withValues(alpha: 0.30), width: 0.85),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.trash2, color: AppColors.bearish, size: 12.0),
+                    SizedBox(width: 4),
+                    Text(
+                      'Reset',
+                      style: TextStyle(
+                        color: AppColors.bearish,
+                        fontSize: 11.0,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 7),
             GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: _triggerSync,
