@@ -82,13 +82,17 @@ class _FundamentalScreenState extends State<FundamentalScreen> {
     }
   }
 
-  Future<void> _openNewsScenario({String? eventTitle, String? currency}) async {
+  Future<void> _openNewsScenario({EconomicEventModel? event}) async {
     setState(() => _isLoadingScenario = true);
     try {
       final scenario = await _api.getNewsIntelligence(
         symbol: 'XAUUSD',
-        eventTitle: eventTitle,
-        currency: currency,
+        eventTitle: event?.eventTitle,
+        currency: event?.currency,
+        scheduledAt: event?.scheduledAt.toUtc().toIso8601String(),
+        forecast: event?.forecastValue,
+        previous: event?.previousValue,
+        actual: event?.actualValue,
       );
       if (mounted) {
         NewsScenarioSheet.show(context, scenario);
@@ -376,10 +380,7 @@ class _FundamentalScreenState extends State<FundamentalScreen> {
                                 return EventCard(
                                   event: ev,
                                   onTap: isHigh
-                                      ? () => _openNewsScenario(
-                                            eventTitle: ev.eventTitle,
-                                            currency: ev.currency,
-                                          )
+                                      ? () => _openNewsScenario(event: ev)
                                       : null,
                                 );
                               },

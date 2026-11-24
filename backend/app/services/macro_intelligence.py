@@ -901,12 +901,18 @@ class MacroIntelligenceService:
         src_extra = f" (+{len(unique_sources) - 5} lainnya)" if len(unique_sources) > 5 else ""
         src_header = f"{len(unique_sources)} sumber global ({src_sample}{src_extra})" if unique_sources else "kantor berita global"
 
+        analyzed_count = len(scored_candidates)
+        count_label = (
+            f"{analyzed_count} berita ({fresh_count} breaking <3 jam)"
+            if fresh_count > 0
+            else f"{analyzed_count} berita terkini"
+        )
         if cross_source_highlights:
             top_pairs = " | ".join(
                 f"{h['title'][:78]} ({h['source']})" for h in cross_source_highlights[:2]
             )
             summary = (
-                f"Sintesis {fresh_count} berita segar dari {src_header}: narasi dominan {dom_label} {bias_txt}. "
+                f"Sintesis {count_label} dari {src_header}: narasi dominan {dom_label} {bias_txt}. "
                 f"Lintas sumber: {top_pairs}."
             )
         else:

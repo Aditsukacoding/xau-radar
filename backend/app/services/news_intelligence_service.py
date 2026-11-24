@@ -26,7 +26,8 @@ Tugasmu membantu memahami apa yang sedang terjadi di pasar sebelum dan sesudah b
 
 ATURAN MUTLAK INTEGRITAS DATA & ZERO-HALLUCINATION:
 1. HARGA AKTIF PASAR: Semua perhitungan level support, resistance, target skenario, dan invalidasi HARUS berpatokan presisi pada `current_price` ($X.XX) yang diberikan dalam payload JSON. JANGAN PERNAH mengarang harga masa lalu (seperti $1900-$2400 jika harga saat ini $4100+). Mengabaikan harga aktif adalah kesalahan fatal.
-2. KALENDER & KATALIS RESMI: Gunakan daftar `verified_upcoming_catalysts` yang disediakan dari database resmi untuk mengisi `pending_catalysts`. Dilarang mengarang tanggal atau nama event fiktif.
+2. AKURASI EVENT & ANGKA RILIS: WAJIB gunakan `event_title`, `currency`, `scheduled_at_wib`, `consensus`, `previous`, dan `actual` PERSIS seperti di payload JSON. DILARANG KERAS mengganti satuan/angka (misal menulis 98K/162K untuk data inflasi persen `%`, atau mengarang tanggal lain).
+3. KALENDER & KATALIS RESMI: Gunakan daftar `verified_upcoming_catalysts` yang disediakan dari kalender live/database resmi untuk mengisi `pending_catalysts`. Dilarang mengarang tanggal atau nama event fiktif.
 3. POLA 3 SKENARIO WAJIB KONSISTEN:
    - Skenario A (Hawkish Surprise / Inflasi Panas / NFP Kuat): Yield US10Y & DXY melonjak naik -> Emas tertekan turun menuju target Support (di bawah harga sekarang).
    - Skenario B (Sesuai Konsensus / In-Line): Reaksi whipsaw cepat sebelum stabil -> Emas berkonsolidasi di rentang teknikal sekitar harga sekarang.
@@ -107,55 +108,218 @@ SCHEMA JSON HARUS PERSIS (VALID JSON TANPA MARKDOWN):
 
 class NewsIntelligenceService:
     @staticmethod
+    def _parse_iso_utc(raw: Optional[str]) -> Optional[datetime]:
+        if not raw or not str(raw).strip():
+            return None
+        try:
+            dt = datetime.fromisoformat(str(raw).strip().replace("Z", "+00:00"))
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _match_live_calendar_event(
+        raw_events: List[Dict[str, Any]],
+        target_title: Optional[str],
+        curr_filter: Optional[str],
+        now_utc: datetime,
+        target_sched_utc: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Matches the exact event in live ForexFactory/TradingView calendar feed."""
+        if not raw_events:
+            return None
+
+        def _ev_utc(ev: Dict[str, Any]) -> datetime:
+            s = ev.get("scheduled_at")
+            if isinstance(s, datetime):
+                return s.replace(tzinfo=timezone.utc) if s.tzinfo is None else s.astimezone(timezone.utc)
+            parsed = NewsIntelligenceService._parse_iso_utc(str(s or ""))
+            return parsed or now_utc
+
+        if target_title and target_title.strip():
+            t_low = target_title.strip().lower()
+            exact: List[Dict[str, Any]] = []
+            partial: List[Dict[str, Any]] = []
+            for ev in raw_events:
+                ev_curr = str(ev.get("currency") or "").upper()
+                if curr_filter and ev_curr != curr_filter:
+                    continue
+                ev_title = str(ev.get("event_title") or "").strip().lower()
+                if ev_title == t_low:
+                    exact.append(ev)
+                elif t_low in ev_title or ev_title in t_low:
+                    partial.append(ev)
+            pool = exact or partial
+            if pool:
+                ref_dt = target_sched_utc or now_utc
+                # Pick the instance closest to target_sched_utc (or nearest upcoming/recent to now_utc)
+                pool.sort(key=lambda e: abs((_ev_utc(e) - ref_dt).total_seconds()))
+                return pool[0]
+            return None
+
+        # No specific title: pick next upcoming HIGH-impact USD/EUR event (preferring USD direct Gold catalyst)
+        upcoming_usd = [
+            ev for ev in raw_events
+            if str(ev.get("impact_level") or "").upper() == "HIGH"
+            and str(ev.get("currency") or "").upper() == "USD"
+            and _ev_utc(ev) >= (now_utc - timedelta(hours=3))
+        ]
+        if upcoming_usd:
+            upcoming_usd.sort(key=_ev_utc)
+            return upcoming_usd[0]
+
+        upcoming_major = [
+            ev for ev in raw_events
+            if str(ev.get("impact_level") or "").upper() == "HIGH"
+            and str(ev.get("currency") or "").upper() in ("USD", "EUR", "GBP")
+            and _ev_utc(ev) >= (now_utc - timedelta(hours=3))
+        ]
+        if upcoming_major:
+            upcoming_major.sort(key=_ev_utc)
+            return upcoming_major[0]
+        return None
+
+    @staticmethod
     async def get_or_generate_scenario(
         db: Session,
         symbol: str = "XAUUSD",
         target_event_title: Optional[str] = None,
         target_currency: Optional[str] = None,
+        target_scheduled_at: Optional[str] = None,
+        target_forecast: Optional[str] = None,
+        target_previous: Optional[str] = None,
+        target_actual: Optional[str] = None,
     ) -> NewsIntelligenceResponse:
         """
         Generates or retrieves deep institutional news scenario planning (Pre-News & Post-News Actual synchronized).
+        Always synchronizes against BOTH DB and live ForexFactory/TradingView calendar + exact tapped event values.
         """
+        import asyncio
         symbol = symbol.upper()
         now_utc = datetime.now(timezone.utc)
         now_wib = datetime.now(WIB)
+        provider = get_data_provider()
 
-        # 1. Locate Target Event (respecting BOTH event_title AND currency so GBP CPI never collides with USD/CAD CPI!)
-        event = None
         curr_filter = target_currency.strip().upper() if target_currency and target_currency.strip() else None
-        if target_event_title:
-            q = db.query(EconomicEvent).filter(EconomicEvent.event_title.ilike(target_event_title.strip()))
+        req_sched_utc = NewsIntelligenceService._parse_iso_utc(target_scheduled_at)
+
+        # 1. Locate Target Event: Check DB first, AND ALWAYS check live calendar feed so clicked calendar cards NEVER miss!
+        event = None
+        if target_event_title and target_event_title.strip():
+            t_clean = target_event_title.strip()
+            q = db.query(EconomicEvent).filter(EconomicEvent.event_title.ilike(t_clean))
             if curr_filter:
                 q = q.filter(EconomicEvent.currency == curr_filter)
-            # Prefer most recent / nearest event (desc scheduled_at so latest week's release is chosen!)
-            event = q.order_by(desc(EconomicEvent.scheduled_at)).first()
-            if not event:
-                q2 = db.query(EconomicEvent).filter(EconomicEvent.event_title.ilike(f"%{target_event_title.strip()}%"))
+            candidates = q.all()
+            if not candidates:
+                q2 = db.query(EconomicEvent).filter(EconomicEvent.event_title.ilike(f"%{t_clean}%"))
                 if curr_filter:
                     q2 = q2.filter(EconomicEvent.currency == curr_filter)
-                event = q2.order_by(desc(EconomicEvent.scheduled_at)).first()
+                candidates = q2.all()
+            if candidates:
+                ref_dt = req_sched_utc or now_utc
+                candidates.sort(
+                    key=lambda e: abs(
+                        ((e.scheduled_at.replace(tzinfo=timezone.utc) if e.scheduled_at.tzinfo is None else e.scheduled_at.astimezone(timezone.utc)) - ref_dt).total_seconds()
+                    )
+                )
+                # Accept DB match only if within 10 days of reference (prevents stale months-old DB row overriding this week's live event)
+                best_db = candidates[0]
+                best_dt = best_db.scheduled_at.replace(tzinfo=timezone.utc) if best_db.scheduled_at.tzinfo is None else best_db.scheduled_at.astimezone(timezone.utc)
+                if abs((best_dt - ref_dt).total_seconds()) <= 10 * 86400:
+                    event = best_db
 
-        if not event:
-            # Pick next high-impact USD event first (direct Gold catalyst)
+        # Fetch live ForexFactory calendar (cached 15 min in memory — ultra fast!) to match live events & build real upcoming catalysts
+        live_cal_events: List[Dict[str, Any]] = []
+        try:
+            live_cal_events = await provider.get_economic_calendar(days_ahead=14) or []
+        except Exception as cal_err:
+            logger.debug(f"[NewsIntelligence] Live calendar fetch skipped: {cal_err}")
+
+        live_matched: Optional[Dict[str, Any]] = None
+        if live_cal_events:
+            live_matched = NewsIntelligenceService._match_live_calendar_event(
+                raw_events=live_cal_events,
+                target_title=target_event_title,
+                curr_filter=curr_filter,
+                now_utc=now_utc,
+                target_sched_utc=req_sched_utc,
+            )
+
+        # Only pick next generic HIGH event from DB when user did NOT tap a specific event title!
+        if not event and not live_matched and not (target_event_title and target_event_title.strip()):
             event = (
                 db.query(EconomicEvent)
                 .filter(
                     EconomicEvent.impact_level == "HIGH",
                     EconomicEvent.currency.in_(["USD", "EUR"]),
-                    EconomicEvent.scheduled_at >= (now_utc - timedelta(hours=4))
+                    EconomicEvent.scheduled_at >= (now_utc - timedelta(hours=4)),
                 )
                 .order_by(EconomicEvent.scheduled_at.asc())
                 .first()
             )
 
-        # Fallback default target if calendar has no pending high impact
-        event_name = event.event_title if event else (target_event_title or "US Non-Farm Payrolls (NFP)")
-        currency = event.currency if event else (curr_filter or "USD")
-        sched_utc = event.scheduled_at.replace(tzinfo=timezone.utc) if event else (now_utc + timedelta(days=2))
+        # Resolve final event metadata with strict priority:
+        # Live matched calendar event > DB matched event > Exact tapped calendar card params (NEVER fake 98K/162K!)
+        def _clean_val(v: Optional[str]) -> Optional[str]:
+            if v is None:
+                return None
+            s = str(v).strip()
+            return s if s and s.lower() not in ("none", "null", "n/a", "-", "belum rilis") else None
+
+        ev_source_title = (
+            (live_matched.get("event_title") if live_matched else None)
+            or (event.event_title if event else None)
+            or (target_event_title.strip() if target_event_title and target_event_title.strip() else None)
+            or "US High-Impact Macro Catalyst"
+        )
+        event_name = str(ev_source_title).strip()
+        currency = str(
+            (live_matched.get("currency") if live_matched else None)
+            or (event.currency if event else None)
+            or curr_filter
+            or "USD"
+        ).strip().upper()
+        impact_lvl = str(
+            (live_matched.get("impact_level") if live_matched else None)
+            or (event.impact_level if event else None)
+            or "HIGH"
+        ).strip().upper()
+
+        # Resolve exact scheduled_at UTC
+        sched_utc: Optional[datetime] = None
+        if req_sched_utc is not None:
+            sched_utc = req_sched_utc
+        elif live_matched and live_matched.get("scheduled_at"):
+            s_raw = live_matched["scheduled_at"]
+            sched_utc = (
+                s_raw.replace(tzinfo=timezone.utc) if isinstance(s_raw, datetime) and s_raw.tzinfo is None
+                else (s_raw.astimezone(timezone.utc) if isinstance(s_raw, datetime) else NewsIntelligenceService._parse_iso_utc(str(s_raw)))
+            )
+        elif event and event.scheduled_at:
+            sched_utc = event.scheduled_at.replace(tzinfo=timezone.utc) if event.scheduled_at.tzinfo is None else event.scheduled_at.astimezone(timezone.utc)
+        if sched_utc is None:
+            sched_utc = now_utc
         sched_wib = sched_utc.astimezone(WIB)
-        consensus_val = event.forecast_value if (event and event.forecast_value) else "98K"
-        previous_val = event.previous_value if (event and event.previous_value) else "162K"
-        actual_val = event.actual_value.strip() if (event and event.actual_value and event.actual_value.strip()) else None
+
+        # Resolve exact Forecast / Previous / Actual (strictly matching tapped card / live feed / DB — NEVER fake 98K/162K!)
+        consensus_val = (
+            _clean_val(target_forecast)
+            or _clean_val(live_matched.get("forecast_value") if live_matched else None)
+            or _clean_val(event.forecast_value if event else None)
+            or "-"
+        )
+        previous_val = (
+            _clean_val(target_previous)
+            or _clean_val(live_matched.get("previous_value") if live_matched else None)
+            or _clean_val(event.previous_value if event else None)
+            or "-"
+        )
+        actual_val = (
+            _clean_val(target_actual)
+            or _clean_val(live_matched.get("actual_value") if live_matched else None)
+            or _clean_val(event.actual_value if event else None)
+        )
 
         # If event already passed but DB missed actual_value, sync live from TradingView right now!
         if not actual_val and sched_utc <= now_utc:
@@ -166,8 +330,8 @@ class NewsIntelligenceService:
                     currency=currency,
                     title=event_name,
                     scheduled_at=sched_utc,
-                    forecast=consensus_val,
-                    previous=previous_val,
+                    forecast=consensus_val if consensus_val != "-" else None,
+                    previous=previous_val if previous_val != "-" else None,
                     tv_events=tv_events,
                 )
                 if matched_act:
@@ -182,13 +346,11 @@ class NewsIntelligenceService:
                 logger.debug(f"[NewsIntelligence] Live actual sync check skipped: {e}")
 
         # 2. Get Live Market Price Snapshot & Live Intermarket (DXY, US10Y, WTI) concurrently
-        import asyncio
-        provider = get_data_provider()
         price_snapshot, intermarket_snap = await asyncio.gather(
             provider.get_latest_price(symbol),
             MacroIntelligenceService.fetch_intermarket_snapshot(),
         )
-        curr_price = price_snapshot.get("current_price", 4198.50)
+        curr_price = price_snapshot.get("current_price", 3630.0)
 
         # 3. Get Technical Candlestick Levels (ensure rich 1H history for Historical News Reaction tracking)
         candles_h1 = (
@@ -212,7 +374,7 @@ class NewsIntelligenceService:
                     is_h1_stale = False
         if is_h1_stale:
             try:
-                live_h1 = await provider.get_candles(symbol, "1h", count=240)
+                live_h1 = await provider.get_price_candles(symbol=symbol, timeframe="1h", count=240)
                 if live_h1 and len(live_h1) >= 20:
                     candles_list = live_h1
             except Exception:
@@ -228,21 +390,24 @@ class NewsIntelligenceService:
         res2 = resistances[1] if len(resistances) > 1 else round(curr_price + 55.0, 1)
         trend = tech_data.get("trend_direction", "BEARISH") if tech_data else "BEARISH"
 
-        # 4. Fetch smart upcoming catalysts tailored specifically to this event's theme from SQLite DB
+        # 4. Fetch smart upcoming catalysts tailored specifically to this event's theme (Live Calendar + DB)
         pending_catalysts = NewsIntelligenceService._get_smart_pending_catalysts(
             db=db,
             target_event=event,
-            now_utc=now_utc
+            now_utc=now_utc,
+            live_events=live_cal_events,
+            target_title_override=event_name,
+            target_currency_override=currency,
         )
 
         # 4b. Evaluate Numeric Actual vs Forecast Comparison + Historical News Reactions (14 days)
         target_ev_dict = {
             "event_title": event_name,
             "currency": currency,
-            "impact_level": event.impact_level if event else "HIGH",
+            "impact_level": impact_lvl,
             "actual_value": actual_val,
-            "forecast_value": consensus_val,
-            "previous_value": previous_val,
+            "forecast_value": consensus_val if consensus_val != "-" else None,
+            "previous_value": previous_val if previous_val != "-" else None,
         }
         event_eval = MacroIntelligenceService.evaluate_economic_event_impact(target_ev_dict)
         event_comparison_note = event_eval["comparison_note"]
@@ -794,15 +959,20 @@ class NewsIntelligenceService:
         is_speech = any(k in title_lower for k in ["speaks", "speech", "testimony", "press conf"])
 
         if is_inflation:
-            val = num if num is not None else 0.3
-            if val <= 1.0:
-                strong_cond = f"Actual >= {val + 0.1:.1f}% (Tekanan harga lebih panas dari estimasi {consensus_val})"
-                inline_cond = f"Actual di kisaran {max(0.0, val - 0.1):.1f}% - {val:.1f}% (Sesuai konsensus {consensus_val})"
-                weak_cond = f"Actual <= {max(0.0, val - 0.2):.1f}% (Inflasi melandai tajam di bawah konsensus)"
+            if num is not None:
+                val = num
+                if abs(val) <= 1.0:
+                    strong_cond = f"Actual >= {val + 0.1:.1f}% (Tekanan harga lebih panas dari estimasi {consensus_val})"
+                    inline_cond = f"Actual di kisaran {val:.1f}% (Sesuai konsensus {consensus_val})"
+                    weak_cond = f"Actual <= {val - 0.1:.1f}% (Inflasi melandai di bawah konsensus {consensus_val})"
+                else:
+                    strong_cond = f"Actual >= {val + 0.2:.1f}% (Tekanan harga lebih panas dari estimasi {consensus_val})"
+                    inline_cond = f"Actual di kisaran {val - 0.1:.1f}% - {val + 0.1:.1f}% (Sesuai konsensus {consensus_val})"
+                    weak_cond = f"Actual <= {val - 0.2:.1f}% (Inflasi melandai tajam di bawah konsensus {consensus_val})"
             else:
-                strong_cond = f"Actual >= {val + 0.2:.1f}% (Tekanan harga lebih panas dari estimasi {consensus_val})"
-                inline_cond = f"Actual di kisaran {val - 0.1:.1f}% - {val + 0.1:.1f}% (Sesuai konsensus {consensus_val})"
-                weak_cond = f"Actual <= {val - 0.2:.1f}% (Inflasi melandai tajam di bawah konsensus)"
+                strong_cond = f"Actual lebih panas dari ekspektasi pasar (tekanan inflasi {currency} meningkat)"
+                inline_cond = "Actual stabil sesuai ekspektasi konsensus pasar"
+                weak_cond = f"Actual lebih rendah dari ekspektasi pasar (disinflasi {currency} berlanjut)"
 
             scenarios = [
                 NewsScenarioItem(
@@ -1158,25 +1328,68 @@ class NewsIntelligenceService:
     def _get_smart_pending_catalysts(
         db: Session,
         target_event: Optional[EconomicEvent],
-        now_utc: datetime
+        now_utc: datetime,
+        live_events: Optional[List[Dict[str, Any]]] = None,
+        target_title_override: Optional[str] = None,
+        target_currency_override: Optional[str] = None,
     ) -> List[Dict[str, str]]:
-        title_lower = target_event.event_title.lower() if target_event else ""
-        target_currency = target_event.currency if target_event else "USD"
+        title_lower = (target_title_override or (target_event.event_title if target_event else "") or "").lower()
+        target_currency = (target_currency_override or (target_event.currency if target_event else "USD") or "USD").upper()
 
         is_labor = any(k in title_lower for k in ["non-farm", "nfp", "adp", "payroll", "employment", "earnings", "claim", "jobless", "unemployment"])
         is_inflation = any(k in title_lower for k in ["pce", "cpi", "ppi", "inflation", "price index", "prices"])
         is_growth = any(k in title_lower for k in ["gdp", "retail sales", "spending", "trade balance", "orders"])
         is_rate = any(k in title_lower for k in ["rate", "fomc", "monetary policy", "cash rate"])
 
-        candidates = (
-            db.query(EconomicEvent)
-            .filter(
-                EconomicEvent.scheduled_at >= (now_utc - timedelta(hours=1)),
-                EconomicEvent.id != (target_event.id if target_event else -1)
+        # Normalize candidates from live calendar feed (primary) + DB (fallback) so pending catalysts are ALWAYS current!
+        class _CandObj:
+            __slots__ = ("event_title", "currency", "impact_level", "scheduled_at", "forecast_value", "previous_value")
+            def __init__(self, title, currency, impact, sched, fc, prev):
+                self.event_title = title
+                self.currency = currency
+                self.impact_level = impact
+                self.scheduled_at = sched
+                self.forecast_value = fc
+                self.previous_value = prev
+
+        candidates: List[Any] = []
+        if live_events:
+            for lev in live_events:
+                s_raw = lev.get("scheduled_at")
+                if isinstance(s_raw, datetime):
+                    s_dt = s_raw.replace(tzinfo=timezone.utc) if s_raw.tzinfo is None else s_raw.astimezone(timezone.utc)
+                else:
+                    s_dt = NewsIntelligenceService._parse_iso_utc(str(s_raw or ""))
+                if not s_dt or s_dt < (now_utc - timedelta(hours=1)):
+                    continue
+                ev_t = str(lev.get("event_title") or "").strip()
+                if ev_t.lower() == title_lower and str(lev.get("currency") or "").upper() == target_currency:
+                    continue
+                candidates.append(_CandObj(
+                    ev_t,
+                    str(lev.get("currency") or "USD").upper(),
+                    str(lev.get("impact_level") or "LOW").upper(),
+                    s_dt,
+                    lev.get("forecast_value"),
+                    lev.get("previous_value"),
+                ))
+
+        if not candidates:
+            db_cands = (
+                db.query(EconomicEvent)
+                .filter(
+                    EconomicEvent.scheduled_at >= (now_utc - timedelta(hours=1)),
+                    EconomicEvent.id != (target_event.id if target_event else -1),
+                )
+                .order_by(EconomicEvent.scheduled_at.asc())
+                .all()
             )
-            .order_by(EconomicEvent.scheduled_at.asc())
-            .all()
-        )
+            for dc in db_cands:
+                s_dt = dc.scheduled_at.replace(tzinfo=timezone.utc) if dc.scheduled_at.tzinfo is None else dc.scheduled_at.astimezone(timezone.utc)
+                candidates.append(_CandObj(
+                    dc.event_title, (dc.currency or "USD").upper(), (dc.impact_level or "LOW").upper(),
+                    s_dt, dc.forecast_value, dc.previous_value,
+                ))
 
         scored_events = []
         for ev in candidates:
@@ -1322,12 +1535,7 @@ class NewsIntelligenceService:
 
         if not results:
             results = [
-                {"time_wib": "30 Sep • 19:15 WIB", "event": "[USD] ADP Non-Farm Employment (F: 73K, P: 38K) • Data pendahulu serapan kerja swasta"},
-                {"time_wib": "30 Sep • 19:30 WIB", "event": "[USD] Core PCE Price Index m/m (F: 0.3%, P: 0.2%) • Barometer inflasi acuan suku bunga Fed"},
-                {"time_wib": "01 Okt • 19:30 WIB", "event": "[USD] Initial Jobless Claims (F: 201K, P: 197K) • Deteksi dini PHK mingguan sebelum NFP"},
-                {"time_wib": "02 Okt • 19:30 WIB", "event": "[USD] Non-Farm Employment Change (F: 90K, P: 162K) • Katalis puncak ketenagakerjaan AS"},
-                {"time_wib": "02 Okt • 19:30 WIB", "event": "[USD] Unemployment Rate (F: 4.1%, P: 4.1%) • Rilis serentak: tingkat pengangguran nasional"},
-                {"time_wib": "02 Okt • 19:30 WIB", "event": "[USD] Average Hourly Earnings (F: 0.3%, P: 0.3%) • Rilis serentak: tekanan upah pekerja"}
+                {"time_wib": "Pantau Kalender", "event": f"Tidak ada katalis {target_currency} berimpak tinggi lanjutan dalam 14 hari ke depan."}
             ]
 
         return results

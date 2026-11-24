@@ -14,6 +14,10 @@ async def get_latest_news_scenario(
     symbol: str = "XAUUSD",
     event_title: Optional[str] = Query(None, description="Judul event spesifik (misal: NFP, CPI, FOMC)"),
     currency: Optional[str] = Query(None, description="Mata uang event (misal: USD, GBP, EUR)"),
+    scheduled_at: Optional[str] = Query(None, description="ISO timestamp jadwal event yang diklik"),
+    forecast: Optional[str] = Query(None, description="Angka forecast/konsensus resmi dari kartu kalender"),
+    previous: Optional[str] = Query(None, description="Angka rilis sebelumnya resmi dari kartu kalender"),
+    actual: Optional[str] = Query(None, description="Angka aktual resmi jika sudah rilis"),
     db: Session = Depends(get_db)
 ):
     """
@@ -30,6 +34,10 @@ async def get_latest_news_scenario(
         symbol=symbol.upper(),
         target_event_title=event_title,
         target_currency=currency,
+        target_scheduled_at=scheduled_at,
+        target_forecast=forecast,
+        target_previous=previous,
+        target_actual=actual,
     )
 
 

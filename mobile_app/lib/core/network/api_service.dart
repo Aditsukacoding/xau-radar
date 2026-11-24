@@ -218,6 +218,10 @@ class ApiService {
     String symbol = 'XAUUSD',
     String? eventTitle,
     String? currency,
+    String? scheduledAt,
+    String? forecast,
+    String? previous,
+    String? actual,
   }) async {
     final params = <String>[];
     if (eventTitle != null && eventTitle.isNotEmpty) {
@@ -225,6 +229,18 @@ class ApiService {
     }
     if (currency != null && currency.isNotEmpty) {
       params.add('currency=${Uri.encodeComponent(currency)}');
+    }
+    if (scheduledAt != null && scheduledAt.isNotEmpty) {
+      params.add('scheduled_at=${Uri.encodeComponent(scheduledAt)}');
+    }
+    if (forecast != null && forecast.isNotEmpty) {
+      params.add('forecast=${Uri.encodeComponent(forecast)}');
+    }
+    if (previous != null && previous.isNotEmpty) {
+      params.add('previous=${Uri.encodeComponent(previous)}');
+    }
+    if (actual != null && actual.isNotEmpty) {
+      params.add('actual=${Uri.encodeComponent(actual)}');
     }
     final query = params.isNotEmpty ? '?${params.join('&')}' : '';
     final url = '$baseUrl/news-intelligence/latest/$symbol$query';
