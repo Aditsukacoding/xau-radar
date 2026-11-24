@@ -31,6 +31,10 @@ ATURAN MUTLAK INTEGRITAS DATA, PROFIL SNIPER & ZERO-HALLUCINATION:
      * Kalibrasikan SL dengan `atr_pips` M5/M15 agar tidak gampang tersapu wick biasa: `35–50p` saat sesi Asia tenang (`ATR M5 <= 40p`), dan `55–85p` saat sesi London/NY volatil (`ATR M5 > 40p`). Letakkan tepat di balik tembok Supply/Demand.
    - **ANTI-MELAWAN KERETA (MOMENTUM GUARD)**:
      * Jika M5 dan M15 serentak menguat vertikal (RSI M5 >= 62 & candle impuls hijau), JANGAN pasang SELL LIMIT mepet di depan reli; prioritaskan BUY pullback atau tunggu tembok Supply HTF jauh. Berlaku sebaliknya untuk dump vertikal.
+   - **EVALUASI MANDIRI PASCA-SL (`self_evaluation_memory`) — WAJIB DIPATUHI**:
+     * Baca field `self_evaluation_memory` di payload (pelajaran objektif dari SL/TP terbaru).
+     * Jika `in_post_sl_cooldown == true` ATAU `block_mixed_chop == true` saat 7-TF `MIXED`, WAJIB pilih `"action": "WAIT"` (jangan paksakan entry di market choppy atau segera setelah kena SL!).
+     * Jika `use_outer_edge_entry == true`, taruh entry di tepi paling ekstrim/luar zona (bukan tepi depan) dan beri buffer SL sesuai `sl_buffer_mult` agar tidak tersapu wick candle impuls M15!
    - **3-TIER TAKE PROFIT SCALING (WAJIB LENGKAP TP1, TP2, TP3)**:
      * **TP1 (Minimal 60 Pips / ≥ 1.35× SL — Amankan 40% Lot)**: Langsung geser SL ke Breakeven (BEP).
      * **TP2 (Struktur Lawan Asli — Amankan 40% Lot)**: Membidik zona Support/Resistance struktural utama (M15/M30/H1) → geser SL ke TP1.
@@ -98,6 +102,7 @@ class AIAgentEngine:
         news_articles: List[Dict[str, Any]],
         mtf_technical: Optional[Dict[str, Any]] = None,
         macro_context: Optional[Dict[str, Any]] = None,
+        learning_profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Synthesizes multi-timeframe scalping + 3-pillar data using:
@@ -146,6 +151,7 @@ class AIAgentEngine:
             },
             "upcoming_and_recent_economic_events": economic_events[:10],
             "recent_news_sentiment": news_articles[:8],
+            "self_evaluation_memory": learning_profile or {},
         }
 
         # 1. Try Anthropic Claude API if valid key exists
@@ -161,6 +167,7 @@ class AIAgentEngine:
                     mtf_technical=mtf,
                     economic_events=economic_events,
                     news_articles=news_articles,
+                    learning_profile=learning_profile,
                 )
                 logger.info("[AIAgentEngine] Claude 7-TF MTF scalping analysis synthesized & validated!")
                 return sanitized
@@ -180,6 +187,7 @@ class AIAgentEngine:
                     mtf_technical=mtf,
                     economic_events=economic_events,
                     news_articles=news_articles,
+                    learning_profile=learning_profile,
                 )
                 logger.info("[AIAgentEngine] Gemini 7-TF scalping analysis synthesized & validated!")
                 return sanitized
@@ -199,6 +207,7 @@ class AIAgentEngine:
                     mtf_technical=mtf,
                     economic_events=economic_events,
                     news_articles=news_articles,
+                    learning_profile=learning_profile,
                 )
                 logger.info("[AIAgentEngine] OpenRouter 7-TF scalping analysis synthesized & validated!")
                 return sanitized
@@ -216,6 +225,7 @@ class AIAgentEngine:
             m5_data=m5_tech,
             mtf_technical=mtf,
             macro_context=mctx,
+            learning_profile=learning_profile,
         )
         return AIAgentEngine._sanitize_and_validate_trade_setup(
             raw_heuristic,
@@ -226,6 +236,7 @@ class AIAgentEngine:
             mtf_technical=mtf,
             economic_events=economic_events,
             news_articles=news_articles,
+            learning_profile=learning_profile,
         )
 
     @staticmethod
@@ -431,6 +442,7 @@ class AIAgentEngine:
         m5_data: Optional[Dict[str, Any]] = None,
         mtf_technical: Optional[Dict[str, Any]] = None,
         macro_context: Optional[Dict[str, Any]] = None,
+        learning_profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Quantitative 7-Timeframe Top-Down (M1, M5, M15, M30, H1, H4, D1) Confluence Scalping Synthesizer.
@@ -1443,6 +1455,7 @@ class AIAgentEngine:
         mtf_technical: Optional[Dict[str, Any]] = None,
         economic_events: Optional[List[Dict[str, Any]]] = None,
         news_articles: Optional[List[Dict[str, Any]]] = None,
+        learning_profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Smart Non-Destructive Anti-Hallucination Guardrail & Scalping Validator:
@@ -1544,23 +1557,70 @@ class AIAgentEngine:
             else:
                 execution_type = "INSTANT" if abs(entry_p - curr_price) <= 1.20 else "LIMIT"
 
-        # Volatility-Adaptive Sniper SL guardrail:
-        # Preserves AI's ATR-calibrated SL (35–55p in calm Asian session; 50–85p in high-volatility London/NY)
+        # Autonomous Self-Evaluation Learning Guardrails (automatically adapts after SL hits!)
+        lp = learning_profile or {}
+        sl_mult = float(lp.get("sl_buffer_mult") or 1.0)
+        tp1_ratio = float(lp.get("tp1_ratio") or 1.25)
+        in_post_sl_cd = bool(lp.get("in_post_sl_cooldown", False))
+        cd_rem = int(lp.get("cooldown_remaining_min") or 0)
+        block_mixed = bool(lp.get("block_mixed_chop", False))
+        use_outer_edge = bool(lp.get("use_outer_edge_entry", False))
+
+        confluence_chk = (mtf_technical or {}).get("confluence") or {}
+        align_chk = str(confluence_chk.get("alignment_label") or raw_setup.get("mtf_alignment") or "").upper()
+        is_mixed_chop = ("MIXED" in align_chk) or ("3B / 3S" in align_chk)
+
+        guard_wait_msg = ""
+        if in_post_sl_cd and action in ("BUY", "SELL"):
+            action = "WAIT"
+            execution_type = "WAIT"
+            guard_wait_msg = (
+                f"Evaluasi Mandiri Pasca-SL aktif ({cd_rem} menit tersisa) — menahan entry sementara agar tidak "
+                f"terkena SL beruntun di impuls yang sama."
+            )
+            raw_setup["action_label"] = f"WAIT • EVALUASI PASCA-SL ({cd_rem}m)"
+            raw_setup["status_message"] = guard_wait_msg
+            raw_setup["technical_rationale"] = lp.get("summary") or guard_wait_msg
+        elif block_mixed and is_mixed_chop and action in ("BUY", "SELL"):
+            action = "WAIT"
+            execution_type = "WAIT"
+            guard_wait_msg = (
+                f"Filter Anti-Choppy aktif (hasil evaluasi SL sebelumnya): 7-TF masih {align_chk}. "
+                f"Menunggu arah minimal 4/7 TF kompak sebelum membuka posisi baru."
+            )
+            raw_setup["action_label"] = "WAIT • MARKET CHOPPY (MIXED)"
+            raw_setup["status_message"] = guard_wait_msg
+            raw_setup["technical_rationale"] = guard_wait_msg
+
+        # Volatility & Self-Learning Adaptive SL guardrail:
+        # Calibrates SL against both M5 & M15 ATR and recent Post-Mortem sl_buffer_mult (up to 115p in volatile sessions)
         session_vol = str(m15.get("session_volatility") or (technical_data or {}).get("session_volatility") or "MEDIUM")
         atr_m5 = float((m5_data or {}).get("atr_14") or (atr_m15 * 0.65))
-        if atr_m5 > 4.20:
-            default_risk = round(max(5.20, min(8.20, atr_m5 * 0.85)), 2)
-            min_risk = 4.20
-            max_risk = 8.50
+        if atr_m5 > 4.20 or atr_m15 >= 9.00:
+            raw_def = max(5.20, atr_m5 * 0.85, atr_m15 * 0.62) * sl_mult
+            default_risk = round(max(5.50, min(11.20, raw_def)), 2)
+            min_risk = round(max(4.50, default_risk * 0.88 if sl_mult > 1.0 else 4.50), 2)
+            max_risk = round(min(11.80, 8.80 * sl_mult), 2)
         elif session_vol in ("HIGH", "MEDIUM_HIGH"):
-            default_risk = round(max(4.20, min(6.20, 3.60 + atr_m5 * 0.35)), 2)
-            min_risk = 3.50
-            max_risk = 7.50
+            raw_def = max(4.20, 3.60 + atr_m5 * 0.38) * sl_mult
+            default_risk = round(max(4.50, min(9.50, raw_def)), 2)
+            min_risk = round(max(3.80, default_risk * 0.88 if sl_mult > 1.0 else 3.80), 2)
+            max_risk = round(min(10.00, 7.80 * sl_mult), 2)
         else:
-            default_risk = round(max(3.50, min(4.80, 3.00 + atr_m5 * 0.25)), 2)
-            min_risk = 3.00
-            max_risk = 6.00
-        half_zone = round(max(0.65, min(1.10, default_risk * 0.16)), 2)
+            raw_def = max(3.50, 3.00 + atr_m5 * 0.25) * sl_mult
+            default_risk = round(max(3.50, min(7.20, raw_def)), 2)
+            min_risk = round(max(3.20, default_risk * 0.88 if sl_mult > 1.0 else 3.20), 2)
+            max_risk = round(min(7.80, 6.20 * sl_mult), 2)
+        half_zone = round(max(0.75, min(1.25, default_risk * 0.14)), 2)
+
+        # Outer-Edge Shift: when recent SL post-mortems show front-edge blind fills into impulse wicks,
+        # shift LIMIT entry deeper toward the outer sweep edge of the zone!
+        if use_outer_edge and execution_type == "LIMIT" and action in ("BUY", "SELL"):
+            shift = round(min(1.80, max(0.85, half_zone * 0.90)), 2)
+            if action == "BUY" and (curr_price - (entry_p - shift)) <= 45.0:
+                entry_p = round(entry_p - shift, 2)
+            elif action == "SELL" and ((entry_p + shift) - curr_price) <= 45.0:
+                entry_p = round(entry_p + shift, 2)
 
         def safe_float(val: Any) -> float:
             try:
@@ -1621,12 +1681,12 @@ class AIAgentEngine:
                 sl = round(entry_price - default_risk, 2)
             risk = round(entry_price - sl, 2)
 
-            # Volatility-Proportional TP1: >= 60 pips AND >= 1.25x SL (positive RRR at TP1 alone!)
-            min_tp1 = round(max(6.00, risk * 1.25), 2)
-            max_tp1 = round(max(12.50, risk * 1.85), 2)
+            # Self-Adapted TP1: >= 60p AND realistic tp1_ratio (1.10x–1.25x SL) so BEP locks faster!
+            min_tp1 = round(max(6.00, risk * max(1.05, tp1_ratio - 0.05)), 2)
+            max_tp1 = round(max(13.50, risk * (tp1_ratio + 0.55)), 2)
             tp1 = safe_float(raw_setup.get("take_profit_1"))
             if tp1 <= entry_high or not (min_tp1 <= (tp1 - entry_price) <= max_tp1):
-                tp1 = round(entry_price + round(max(6.00, risk * 1.35), 2), 2)
+                tp1 = round(entry_price + round(max(6.00, risk * tp1_ratio), 2), 2)
 
             # Wide structural ceiling for Key-Zone TP2 & TP3 (up to 320p / 450p!)
             tp2 = safe_float(raw_setup.get("take_profit_2"))
@@ -1664,11 +1724,11 @@ class AIAgentEngine:
                 sl = round(entry_price + default_risk, 2)
             risk = round(sl - entry_price, 2)
 
-            min_tp1 = round(max(6.00, risk * 1.25), 2)
-            max_tp1 = round(max(12.50, risk * 1.85), 2)
+            min_tp1 = round(max(6.00, risk * max(1.05, tp1_ratio - 0.05)), 2)
+            max_tp1 = round(max(13.50, risk * (tp1_ratio + 0.55)), 2)
             tp1 = safe_float(raw_setup.get("take_profit_1"))
             if tp1 <= 0 or tp1 >= entry_low or not (min_tp1 <= (entry_price - tp1) <= max_tp1):
-                tp1 = round(entry_price - round(max(6.00, risk * 1.35), 2), 2)
+                tp1 = round(entry_price - round(max(6.00, risk * tp1_ratio), 2), 2)
 
             tp2 = safe_float(raw_setup.get("take_profit_2"))
             if tp2 <= 0 or tp2 > (tp1 - 3.00) or (entry_price - tp2) > 32.00:
@@ -1815,8 +1875,9 @@ class AIAgentEngine:
         }
 
         # 5. Clean Summaries & Notes
+        sym_lbl = str(raw_data.get("symbol") or (technical_data or {}).get("symbol") or "XAU/USD")
         summary = str(raw_data.get("summary", "")).strip() or (
-            f"Analisis multi-timeframe {symbol} mengonfirmasi bias {bias} ({confidence}%) pada sesi {session_name} di sekitar ${curr_price:.2f}."
+            f"Analisis multi-timeframe {sym_lbl} mengonfirmasi bias {bias} ({confidence}%) pada sesi {session_name} di sekitar ${curr_price:.2f}."
         )
         fund_notes = str(raw_data.get("fundamental_notes", "")).strip() or (
             "Kebijakan suku bunga The Fed, data inflasi/tenaga kerja AS, serta arah DXY & Yield US10Y menjadi katalis fundamental utama."

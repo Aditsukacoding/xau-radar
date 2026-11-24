@@ -50,4 +50,5 @@ class TradeSignalHistory(Base):
     realized_pips = Column(Float, nullable=False, default=0.0)
 
     outcome_note = Column(Text, nullable=True, default="")
+    post_mortem_json = Column(Text, nullable=True, default=None)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)

@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, field_serializer
 
 
@@ -33,6 +33,7 @@ class SignalHistoryItem(BaseModel):
     max_adverse_pips: float = 0.0
     realized_pips: float = 0.0
     outcome_note: str = ""
+    post_mortem: Optional[Dict[str, Any]] = None
     created_at: datetime
     created_at_wib: str = ""
     triggered_at_wib: Optional[str] = None
@@ -76,5 +77,6 @@ class SignalHistoryResponse(BaseModel):
     current_price: float
     updated_at_wib: str
     stats: SignalHistoryStats
+    self_evaluation: Optional[Dict[str, Any]] = None
     items: List[SignalHistoryItem]
     methodology_note: str

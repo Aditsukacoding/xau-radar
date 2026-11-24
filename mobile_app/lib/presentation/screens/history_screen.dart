@@ -109,7 +109,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
               _buildErrorState()
             else if (_data != null) ...[
               _buildStatsCard(_data!.stats),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
+              if (_data!.selfEvaluation != null && _data!.selfEvaluation!.summary.isNotEmpty) ...[
+                _buildSelfEvaluationCard(_data!.selfEvaluation!),
+                const SizedBox(height: 14),
+              ],
               _buildFilters(),
               const SizedBox(height: 14),
 
@@ -644,6 +648,55 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ],
             ),
 
+            // Compact Post-Mortem Self-Evaluation pill on closed trades (visible immediately!)
+            if (item.postMortem != null && item.postMortem!.causeLabel.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (item.postMortem!.severity == 'WARNING'
+                          ? AppColors.bearish
+                          : (item.postMortem!.severity == 'POSITIVE' ? AppColors.bullish : AppColors.gold))
+                      .withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: (item.postMortem!.severity == 'WARNING'
+                            ? AppColors.bearish
+                            : (item.postMortem!.severity == 'POSITIVE' ? AppColors.bullish : AppColors.gold))
+                        .withValues(alpha: 0.28),
+                    width: 0.7,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.brainCircuit,
+                      size: 12,
+                      color: item.postMortem!.severity == 'WARNING'
+                          ? AppColors.bearish
+                          : (item.postMortem!.severity == 'POSITIVE' ? AppColors.bullish : AppColors.gold),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Evaluasi: ${item.postMortem!.causeLabel}',
+                        style: TextStyle(
+                          color: item.postMortem!.severity == 'WARNING'
+                              ? AppColors.bearish
+                              : (item.postMortem!.severity == 'POSITIVE' ? AppColors.bullish : AppColors.gold),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             // Expandable Detailed Proof, Outcome Explanation & MFE/MAE
             if (isExpanded) ...[
               const SizedBox(height: 10),
@@ -658,6 +711,53 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
+              if (item.postMortem != null && item.postMortem!.diagnosis.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceInset,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.gold.withValues(alpha: 0.25), width: 0.75),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'AUTO POST-MORTEM & PELAJARAN AI',
+                        style: TextStyle(
+                          color: AppColors.gold,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.postMortem!.diagnosis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                          height: 1.4,
+                        ),
+                      ),
+                      if (item.postMortem!.lesson.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          '→ Koreksi: ${item.postMortem!.lesson}',
+                          style: const TextStyle(
+                            color: AppColors.cyan,
+                            fontSize: 11,
+                            height: 1.4,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -706,6 +806,107 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSelfEvaluationCard(SelfEvaluationModel ev) {
+    final bool defensiveMode = ev.consecutiveSl >= 2 || ev.inPostSlCooldown;
+    final Color accent = defensiveMode ? AppColors.gold : AppColors.cyan;
+
+    return IosGlassCard(
+      borderRadius: 18,
+      padding: const EdgeInsets.all(14),
+      borderColor: accent.withValues(alpha: 0.32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(LucideIcons.brainCircuit, color: accent, size: 14),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'EVALUASI MANDIRI AI (AUTO-LEARN)',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: accent.withValues(alpha: 0.35), width: 0.7),
+                ),
+                child: Text(
+                  ev.inPostSlCooldown
+                      ? 'COOLDOWN ${ev.cooldownRemainingMin}m'
+                      : (defensiveMode ? 'DEFENSIF AKTIF' : 'ADAPTIF AKTIF'),
+                  style: AppTypography.mono(
+                    color: accent,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Text(
+            ev.summary,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11.5,
+              height: 1.45,
+            ),
+          ),
+          if (ev.activeAdjustments.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: ev.activeAdjustments.map((adj) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceInset,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: accent.withValues(alpha: 0.28), width: 0.7),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.shieldCheck, size: 11, color: accent),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          adj,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

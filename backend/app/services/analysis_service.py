@@ -14,6 +14,7 @@ from app.providers import get_data_provider
 from app.services.technical_calc import TechnicalCalculator
 from app.services.macro_intelligence import MacroIntelligenceService
 from app.services.signal_history_service import SignalHistoryService
+from app.services.post_mortem_service import PostMortemService
 from app.providers.ai_engine import AIAgentEngine
 from app.core.config import settings
 
@@ -208,6 +209,7 @@ class AnalysisService:
             events_data, news_data, mtf_tech.get("_h1_candles") or [], intermarket=intermarket
         )
 
+        learning_profile = PostMortemService.build_adaptive_learning_profile(db, symbol)
         raw_heuristic = AIAgentEngine._heuristic_synthesis(
             symbol=symbol,
             price_snapshot=price_snapshot,
@@ -218,6 +220,7 @@ class AnalysisService:
             m5_data=m5_tech,
             mtf_technical=mtf_tech,
             macro_context=macro_ctx,
+            learning_profile=learning_profile,
         )
         sanitized = AIAgentEngine._sanitize_and_validate_trade_setup(
             raw_heuristic,
@@ -228,6 +231,7 @@ class AnalysisService:
             mtf_technical=mtf_tech,
             economic_events=events_data,
             news_articles=news_data,
+            learning_profile=learning_profile,
         )
 
         report = AnalysisReport(
@@ -326,7 +330,7 @@ class AnalysisService:
                 or not setup.get("zone_proof")
                 or not setup.get("counter_setup")
                 or int(setup.get("setup_quality_score", 0) or 0) <= 0
-                or (action in ("BUY", "SELL") and (risk_pips_val > 88.0 or risk_pips_val < 28.0 or tp1_pips_val < 55.0))
+                or (action in ("BUY", "SELL") and (risk_pips_val > 125.0 or risk_pips_val < 28.0 or tp1_pips_val < 55.0))
             ):
                 should_regenerate = True
                 reason = "Kalibrasi setup ke Key-Zone Sniper 7-TF (Zona Reaksi Asli, SL Adaptif ATR, TP1–TP3, & Bukti Zona)."
@@ -597,7 +601,10 @@ class AnalysisService:
             events_data, news_data, mtf_tech.get("_h1_candles") or [], intermarket=intermarket
         )
 
-        # 4. Call AI Engine (Claude Sonnet/Haiku -> Gemini -> OpenRouter -> Quantitative 7-TF + Macro Engine)
+        # 3c. Load autonomous Post-Mortem self-evaluation memory (learns automatically from recent SL/TP!)
+        learning_profile = PostMortemService.build_adaptive_learning_profile(db, symbol)
+
+        # 4. Call AI Engine (Claude -> Gemini 3.5 -> OpenRouter -> Quantitative 7-TF + Macro + Self-Learning)
         ai_res = await AIAgentEngine.synthesize_market_bias(
             symbol=symbol,
             price_snapshot=price_snapshot,
@@ -606,6 +613,7 @@ class AnalysisService:
             news_articles=news_data,
             mtf_technical=mtf_tech,
             macro_context=macro_ctx,
+            learning_profile=learning_profile,
         )
 
         # 5. Store report in database

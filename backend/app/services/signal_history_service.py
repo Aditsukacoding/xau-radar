@@ -19,6 +19,7 @@ from app.models.trade_signal_history import TradeSignalHistory
 from app.providers import get_data_provider
 from app.services.technical_calc import TechnicalCalculator
 from app.services.macro_intelligence import MacroIntelligenceService
+from app.services.post_mortem_service import PostMortemService
 from app.schemas.signal_history import (
     SignalHistoryItem,
     SignalHistoryStats,
@@ -554,8 +555,19 @@ class SignalHistoryService:
         except Exception:
             candles = []
 
+        import json
         updated = 0
         now_utc = datetime.now(timezone.utc)
+        last_closed = (
+            db.query(TradeSignalHistory)
+            .filter(
+                TradeSignalHistory.symbol == sym,
+                TradeSignalHistory.source_type == "LIVE",
+                TradeSignalHistory.is_closed == True,
+            )
+            .order_by(desc(TradeSignalHistory.closed_at))
+            .first()
+        )
         for sig in open_rows:
             res = cls._walk_candles_for_outcome(
                 action=sig.action,
@@ -584,6 +596,10 @@ class SignalHistoryService:
             sig.max_adverse_pips = res["max_adverse_pips"]
             sig.realized_pips = res["realized_pips"]
             sig.outcome_note = res["outcome_note"]
+            if sig.is_closed:
+                pm = PostMortemService.evaluate_closed_trade(sig, candles, prev_closed_trade=last_closed)
+                sig.post_mortem_json = json.dumps(pm, ensure_ascii=False)
+                last_closed = sig
             updated += 1
 
         db.commit()
@@ -851,6 +867,33 @@ class SignalHistoryService:
             .all()
         )
 
+        # 3b. Automatically generate forensic Post-Mortem for any closed trade missing post_mortem_json!
+        missing_pm = [r for r in all_rows if r.is_closed and not getattr(r, "post_mortem_json", None)]
+        if missing_pm:
+            import json
+            try:
+                m15_hist = await provider.get_price_candles(symbol=sym, timeframe="15m", count=250)
+            except Exception:
+                m15_hist = []
+            # Walk oldest-to-newest so prev_closed_trade detects back-to-back revenge SL accurately
+            closed_chrono = sorted(
+                [r for r in all_rows if r.is_closed],
+                key=lambda x: (_to_utc(x.closed_at or x.created_at) or datetime.min.replace(tzinfo=timezone.utc)).timestamp(),
+            )
+            prev_tr = None
+            pm_dirty = False
+            for row in closed_chrono:
+                if not getattr(row, "post_mortem_json", None):
+                    pm_dict = PostMortemService.evaluate_closed_trade(row, m15_hist, prev_closed_trade=prev_tr)
+                    row.post_mortem_json = json.dumps(pm_dict, ensure_ascii=False)
+                    pm_dirty = True
+                prev_tr = row
+            if pm_dirty:
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
         # Compute transparent stats across all records (before UI filters)
         wins = 0
         losses = 0
@@ -961,8 +1004,15 @@ class SignalHistoryService:
             reverse=True,
         )
 
+        import json as _json
         items: List[SignalHistoryItem] = []
         for r in filtered[:limit]:
+            pm_obj = None
+            if getattr(r, "post_mortem_json", None):
+                try:
+                    pm_obj = _json.loads(r.post_mortem_json)
+                except Exception:
+                    pm_obj = None
             items.append(
                 SignalHistoryItem(
                     id=r.id,
@@ -994,6 +1044,7 @@ class SignalHistoryService:
                     max_adverse_pips=r.max_adverse_pips,
                     realized_pips=r.realized_pips,
                     outcome_note=r.outcome_note or "",
+                    post_mortem=pm_obj,
                     created_at=r.created_at,
                     created_at_wib=MacroIntelligenceService.format_wib_id(r.created_at),
                     triggered_at_wib=MacroIntelligenceService.format_wib_id(r.triggered_at) if r.triggered_at else None,
@@ -1001,15 +1052,17 @@ class SignalHistoryService:
                 )
             )
 
+        self_eval = PostMortemService.build_adaptive_learning_profile(db, sym)
+
         return SignalHistoryResponse(
             symbol=sym,
             current_price=round(curr_price, 2),
             updated_at_wib=MacroIntelligenceService.format_wib_id(datetime.now(timezone.utc), with_day=True, with_year=True),
             stats=stats,
+            self_evaluation=self_eval,
             items=items,
             methodology_note=(
-                "100% pencatatan LIVE real-time dari awal (tanpa backtest/simulasi). Setiap sinyal yang keluar di Dashboard "
-                "otomatis dipantau terhadap candle OHLC XAU/USD asli (aturan konservatif: jika 1 candle menyentuh SL & TP "
-                "bersamaan sebelum TP1, dihitung SL). Pips mengikuti 3-tier: 40% TP1 (SL→BEP), 40% TP2 (SL→TP1), 20% TP3."
+                "100% pencatatan LIVE real-time dari awal (tanpa backtest/simulasi). Setiap SL/TP dievaluasi otomatis "
+                "secara mandiri (Post-Mortem M15) dan pelajarannya langsung diumpankan kembali ke AI & guardrail risiko."
             ),
         )

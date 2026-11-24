@@ -1,5 +1,76 @@
 import '../../core/utils/wib_date_time.dart';
 
+class TradePostMortemModel {
+  final String causeCode;
+  final String causeLabel;
+  final String severity; // POSITIVE | WARNING | NEUTRAL
+  final String diagnosis;
+  final String lesson;
+
+  const TradePostMortemModel({
+    required this.causeCode,
+    required this.causeLabel,
+    this.severity = 'NEUTRAL',
+    required this.diagnosis,
+    required this.lesson,
+  });
+
+  factory TradePostMortemModel.fromJson(Map<String, dynamic> json) {
+    return TradePostMortemModel(
+      causeCode: json['cause_code']?.toString() ?? '',
+      causeLabel: json['cause_label']?.toString() ?? '',
+      severity: json['severity']?.toString().toUpperCase() ?? 'NEUTRAL',
+      diagnosis: json['diagnosis']?.toString() ?? '',
+      lesson: json['lesson']?.toString() ?? '',
+    );
+  }
+}
+
+class SelfEvaluationModel {
+  final int analyzedTrades;
+  final int consecutiveSl;
+  final bool inPostSlCooldown;
+  final int cooldownRemainingMin;
+  final double slBufferMult;
+  final bool blockMixedChop;
+  final bool useOuterEdgeEntry;
+  final List<String> activeAdjustments;
+  final List<String> recentLessons;
+  final String summary;
+
+  const SelfEvaluationModel({
+    this.analyzedTrades = 0,
+    this.consecutiveSl = 0,
+    this.inPostSlCooldown = false,
+    this.cooldownRemainingMin = 0,
+    this.slBufferMult = 1.0,
+    this.blockMixedChop = false,
+    this.useOuterEdgeEntry = false,
+    this.activeAdjustments = const [],
+    this.recentLessons = const [],
+    this.summary = '',
+  });
+
+  factory SelfEvaluationModel.fromJson(Map<String, dynamic> json) {
+    return SelfEvaluationModel(
+      analyzedTrades: (json['analyzed_trades'] as num?)?.toInt() ?? 0,
+      consecutiveSl: (json['consecutive_sl'] as num?)?.toInt() ?? 0,
+      inPostSlCooldown: json['in_post_sl_cooldown'] == true,
+      cooldownRemainingMin: (json['cooldown_remaining_min'] as num?)?.toInt() ?? 0,
+      slBufferMult: (json['sl_buffer_mult'] as num?)?.toDouble() ?? 1.0,
+      blockMixedChop: json['block_mixed_chop'] == true,
+      useOuterEdgeEntry: json['use_outer_edge_entry'] == true,
+      activeAdjustments: (json['active_adjustments'] is List)
+          ? (json['active_adjustments'] as List).map((e) => e.toString()).toList()
+          : const [],
+      recentLessons: (json['recent_lessons'] is List)
+          ? (json['recent_lessons'] as List).map((e) => e.toString()).toList()
+          : const [],
+      summary: json['summary']?.toString() ?? '',
+    );
+  }
+}
+
 class SignalHistoryItemModel {
   final int id;
   final String symbol;
@@ -30,6 +101,7 @@ class SignalHistoryItemModel {
   final double maxAdversePips;
   final double realizedPips;
   final String outcomeNote;
+  final TradePostMortemModel? postMortem;
   final DateTime createdAt;
   final String createdAtWib;
   final String? triggeredAtWib;
@@ -65,6 +137,7 @@ class SignalHistoryItemModel {
     this.maxAdversePips = 0.0,
     this.realizedPips = 0.0,
     this.outcomeNote = '',
+    this.postMortem,
     required this.createdAt,
     this.createdAtWib = '',
     this.triggeredAtWib,
@@ -113,6 +186,9 @@ class SignalHistoryItemModel {
       maxAdversePips: (json['max_adverse_pips'] as num?)?.toDouble() ?? 0.0,
       realizedPips: (json['realized_pips'] as num?)?.toDouble() ?? 0.0,
       outcomeNote: json['outcome_note']?.toString() ?? '',
+      postMortem: (json['post_mortem'] is Map)
+          ? TradePostMortemModel.fromJson(Map<String, dynamic>.from(json['post_mortem']))
+          : null,
       createdAt: created,
       createdAtWib: (json['created_at_wib']?.toString().isNotEmpty == true)
           ? json['created_at_wib'].toString()
@@ -196,6 +272,7 @@ class SignalHistoryResponseModel {
   final double currentPrice;
   final String updatedAtWib;
   final SignalHistoryStatsModel stats;
+  final SelfEvaluationModel? selfEvaluation;
   final List<SignalHistoryItemModel> items;
   final String methodologyNote;
 
@@ -204,6 +281,7 @@ class SignalHistoryResponseModel {
     required this.currentPrice,
     required this.updatedAtWib,
     required this.stats,
+    this.selfEvaluation,
     required this.items,
     required this.methodologyNote,
   });
@@ -224,6 +302,9 @@ class SignalHistoryResponseModel {
       stats: (json['stats'] is Map)
           ? SignalHistoryStatsModel.fromJson(Map<String, dynamic>.from(json['stats']))
           : const SignalHistoryStatsModel(),
+      selfEvaluation: (json['self_evaluation'] is Map)
+          ? SelfEvaluationModel.fromJson(Map<String, dynamic>.from(json['self_evaluation']))
+          : null,
       items: items,
       methodologyNote: json['methodology_note']?.toString() ?? '',
     );

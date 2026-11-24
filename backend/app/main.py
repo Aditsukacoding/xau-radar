@@ -114,6 +114,18 @@ async def lifespan(app: FastAPI):
                 logger.error(f"Error during database startup seed: {e}")
             finally:
                 db.close()
+        # Safe idempotent schema migration for new columns on existing Neon PostgreSQL / SQLite tables
+        try:
+            from sqlalchemy import text
+            with engine.begin() as conn:
+                if engine.dialect.name == "postgresql":
+                    conn.execute(text("ALTER TABLE trade_signal_history ADD COLUMN IF NOT EXISTS post_mortem_json TEXT"))
+                else:
+                    cols = [r[1] for r in conn.execute(text("PRAGMA table_info(trade_signal_history)")).fetchall()]
+                    if cols and "post_mortem_json" not in cols:
+                        conn.execute(text("ALTER TABLE trade_signal_history ADD COLUMN post_mortem_json TEXT"))
+        except Exception as mig_err:
+            logger.debug(f"Schema migration check note: {mig_err}")
         _DB_BOOTSTRAPPED = True
 
     # 3. Start continuous sub-second live price tick worker & background ingestion daemon
