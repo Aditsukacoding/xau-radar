@@ -47,62 +47,50 @@ class AnalysisService:
             ("1d", 60, 14400),
         ]
 
-        async def load_tf(tf: str, count: int, max_stale: int) -> List[Dict[str, Any]]:
-            candles_db = (
-                db.query(PriceCandle)
-                .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
-                .order_by(desc(PriceCandle.timestamp))
-                .limit(count)
-                .all()
-            )
-            need_live = len(candles_db) < 20
-            if not need_live and candles_db:
-                latest_ts = candles_db[0].timestamp
-                if latest_ts.tzinfo is None:
-                    latest_ts = latest_ts.replace(tzinfo=timezone.utc)
-                if (datetime.now(timezone.utc) - latest_ts).total_seconds() > max_stale:
-                    need_live = True
+        async def load_live_tf(tf: str, count: int) -> List[Dict[str, Any]]:
+            try:
+                raw = await asyncio.wait_for(
+                    provider.get_price_candles(symbol=symbol, timeframe=tf, count=count),
+                    timeout=6.0,
+                )
+                return [dict(c) for c in sorted(raw, key=lambda c: c["timestamp"])] if raw else []
+            except Exception as e:
+                logger.warning(f"[AnalysisService] Live {tf} fetch failed, using DB cache: {e}")
+                return []
 
-            if need_live:
-                try:
-                    raw = await provider.get_price_candles(symbol=symbol, timeframe=tf, count=count)
-                    candles_list = sorted(raw, key=lambda c: c["timestamp"]) if raw else []
-                except Exception as e:
-                    logger.warning(f"[AnalysisService] Live {tf} fetch failed, using DB cache: {e}")
-                    candles_list = [
+        live_fetched = await asyncio.gather(*[load_live_tf(tf, cnt) for tf, cnt, _ in tf_configs])
+
+        # Bounded sequential SQLAlchemy Session fallback ONLY for timeframes without enough live bars
+        fetched: List[List[Dict[str, Any]]] = []
+        for (tf, cnt, _), c_list in zip(tf_configs, live_fetched):
+            if len(c_list) < 15:
+                candles_db = (
+                    db.query(PriceCandle)
+                    .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
+                    .order_by(desc(PriceCandle.timestamp))
+                    .limit(cnt)
+                    .all()
+                )
+                if candles_db:
+                    c_list = [
                         {
                             "timestamp": c.timestamp,
-                            "open": c.open,
-                            "high": c.high,
-                            "low": c.low,
-                            "close": c.close,
-                            "volume": c.volume,
+                            "open": float(c.open),
+                            "high": float(c.high),
+                            "low": float(c.low),
+                            "close": float(c.close),
+                            "volume": float(c.volume or 0.0),
                         }
                         for c in reversed(candles_db)
                     ]
-            else:
-                candles_list = [
-                    {
-                        "timestamp": c.timestamp,
-                        "open": c.open,
-                        "high": c.high,
-                        "low": c.low,
-                        "close": c.close,
-                        "volume": c.volume,
-                    }
-                    for c in reversed(candles_db)
-                ]
 
-            if candles_list and curr_price > 500.0:
-                last = dict(candles_list[-1])
+            if c_list and curr_price > 500.0:
+                last = dict(c_list[-1])
                 last["close"] = curr_price
                 last["high"] = max(float(last["high"]), curr_price)
                 last["low"] = min(float(last["low"]), curr_price)
-                candles_list[-1] = last
-
-            return candles_list
-
-        fetched = await asyncio.gather(*[load_tf(tf, cnt, stale) for tf, cnt, stale in tf_configs])
+                c_list[-1] = last
+            fetched.append(c_list)
 
         mtf_results: Dict[str, Any] = {}
         fallback_candles = fetched[4] if len(fetched[4]) >= 15 else (fetched[2] if len(fetched[2]) >= 15 else fetched[1])
@@ -414,7 +402,6 @@ class AnalysisService:
                             f"PATEN • TP2 Hit (+{tp2_p_lbl}p) | Floating +{pips_diff:.0f}p • SL di TP1 (${tp1:.2f}), runner menuju TP3 ${tp3:.2f}."
                         )
                         latest.trade_setup_json = json.dumps(setup)
-                        db.commit()
                         return latest
                 elif cur_status == "RUNNING_TP1_HIT":
                     # TP1 already hit -> SL shifted to BEP (entry_p)
@@ -438,7 +425,6 @@ class AnalysisService:
                             f"PATEN • TP1 Hit (+{tp1_p_lbl}p) | Floating +{pips_diff:.0f}p • SL aman di BEP (${entry_p:.2f}), menuju TP2 ${tp2:.2f}."
                         )
                         latest.trade_setup_json = json.dumps(setup)
-                        db.commit()
                         return latest
                 elif curr_price >= sl:
                     should_regenerate = True
@@ -471,7 +457,6 @@ class AnalysisService:
                         f"PATEN • Posisi SELL Aktif (${entry_p:.2f}) | Floating {floating_str} pips (terkunci sampai SL/TP)"
                     )
                     latest.trade_setup_json = json.dumps(setup)
-                    db.commit()
                     return latest
 
             # --- 2. EVALUATE BUY SETUP (STRICTLY LOCKED / PATEN UNTIL SL, TP3, TRAILING EXIT, OR INVALIDATION) ---
@@ -518,7 +503,6 @@ class AnalysisService:
                             f"PATEN • TP2 Hit (+{tp2_p_lbl}p) | Floating +{pips_diff:.0f}p • SL di TP1 (${tp1:.2f}), runner menuju TP3 ${tp3:.2f}."
                         )
                         latest.trade_setup_json = json.dumps(setup)
-                        db.commit()
                         return latest
                 elif cur_status == "RUNNING_TP1_HIT":
                     if curr_price >= tp3:
@@ -541,7 +525,6 @@ class AnalysisService:
                             f"PATEN • TP1 Hit (+{tp1_p_lbl}p) | Floating +{pips_diff:.0f}p • SL aman di BEP (${entry_p:.2f}), menuju TP2 ${tp2:.2f}."
                         )
                         latest.trade_setup_json = json.dumps(setup)
-                        db.commit()
                         return latest
                 elif curr_price <= sl:
                     should_regenerate = True
@@ -574,7 +557,6 @@ class AnalysisService:
                         f"PATEN • Posisi BUY Aktif (${entry_p:.2f}) | Floating {floating_str} pips (terkunci sampai SL/TP)"
                     )
                     latest.trade_setup_json = json.dumps(setup)
-                    db.commit()
                     return latest
 
             # --- 3. EVALUATE WAIT / NEWS GUARD SETUP ---

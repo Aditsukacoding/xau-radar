@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/api_service.dart';
-import '../../data/models/price_candle_model.dart';
 import '../../data/models/technical_indicators_model.dart';
 import '../../data/models/trade_setup_model.dart';
 import '../widgets/ios_glass_card.dart';
@@ -22,16 +20,13 @@ class TechnicalScreen extends StatefulWidget {
 
 class _TechnicalScreenState extends State<TechnicalScreen> {
   final ApiService _api = ApiService();
-  List<PriceCandleModel> _candles = [];
   TechnicalIndicatorsModel? _indicators;
   TradeSetupModel? _tradeSetup;
   bool _isLoading = true;
   String? _error;
   String _activeTimeframe = '5m';
 
-  Timer? _livePricePollTimer;
   Timer? _indicatorsAutoSyncTimer;
-  bool _isPollingTick = false;
 
   @override
   void initState() {
@@ -42,84 +37,47 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
 
   @override
   void dispose() {
-    _livePricePollTimer?.cancel();
     _indicatorsAutoSyncTimer?.cancel();
     super.dispose();
   }
 
   void _startRealtimeStreaming() {
-    _livePricePollTimer?.cancel();
     _indicatorsAutoSyncTimer?.cancel();
-
-    // 1. Live spot tick every 5s (smooth on mobile & web)
-    _livePricePollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      if (!mounted || _isPollingTick) return;
-      _isPollingTick = true;
-      try {
-        final tick = await _api.getLivePriceTick(symbol: 'XAUUSD');
-        final double? price = (tick['current_price'] as num?)?.toDouble();
-        if (price != null && mounted) {
-          _applyPriceTick(price);
-        }
-      } catch (_) {
-      } finally {
-        _isPollingTick = false;
-      }
-    });
-
-    // 2. Periodic background silent sync of indicators & candles every 60s
+    // Periodic background silent sync of indicators & trade setup every 60s
     _indicatorsAutoSyncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       _loadTechnicalData(silent: true);
     });
   }
 
-  void _applyPriceTick(double newPrice) {
-    if (_candles.isEmpty) return;
-    final last = _candles.last;
-    final updatedHigh = max(last.high, newPrice);
-    final updatedLow = min(last.low, newPrice);
-
-    setState(() {
-      _candles[_candles.length - 1] = last.copyWith(
-        close: newPrice,
-        high: updatedHigh,
-        low: updatedLow,
-      );
-    });
-  }
-
   Future<void> _loadTechnicalData({bool silent = false}) async {
-    if (!silent && _candles.isEmpty) {
+    if (!silent && _indicators == null) {
       setState(() {
         _isLoading = true;
         _error = null;
       });
     }
     try {
-      // Parallel concurrent load for sub-second page rendering
+      // Fetch only what the screen renders (TradingView widget handles candles & live ticks)
       final results = await Future.wait([
-        _api.getCandles('XAUUSD', timeframe: _activeTimeframe, limit: 60),
         _api.getTechnicalIndicators('XAUUSD', timeframe: _activeTimeframe),
-        _api.getLivePriceTick(symbol: 'XAUUSD').catchError((_) => <String, dynamic>{}),
         _api.getLatestAnalysis(symbol: 'XAUUSD').then<TradeSetupModel?>((rep) => rep.tradeSetup).catchError((_) => null),
       ]);
 
-      final candles = results[0] as List<PriceCandleModel>;
-      final indicators = results[1] as TechnicalIndicatorsModel;
-      final tradeSetup = results[3] as TradeSetupModel?;
+      final indicators = results[0] as TechnicalIndicatorsModel;
+      final tradeSetup = results[1] as TradeSetupModel?;
 
       if (mounted) {
         setState(() {
-          _candles = candles;
           _indicators = indicators;
           _tradeSetup = tradeSetup;
           _isLoading = false;
+          _error = null;
         });
       }
     } catch (e) {
-      if (mounted && _candles.isEmpty) {
+      if (mounted && _indicators == null) {
         setState(() {
-          _error = e.toString();
+          _error = e.toString().replaceFirst('Exception: ', '');
           _isLoading = false;
         });
       }
@@ -147,15 +105,22 @@ class _TechnicalScreenState extends State<TechnicalScreen> {
           ? const Center(child: CupertinoActivityIndicator(radius: 14, color: AppColors.primary))
           : _error != null
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(LucideIcons.circleAlert, color: AppColors.bearish, size: 36),
-                      const SizedBox(height: 8),
-                      Text('Gagal memuat: $_error', style: const TextStyle(color: AppColors.textMuted)),
-                      const SizedBox(height: 12),
-                      CupertinoButton.filled(onPressed: _loadTechnicalData, child: const Text('Coba Lagi')),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(LucideIcons.circleAlert, color: AppColors.bearish, size: 36),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Gagal memuat: $_error',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textMuted),
+                        ),
+                        const SizedBox(height: 14),
+                        CupertinoButton.filled(onPressed: _loadTechnicalData, child: const Text('Coba Lagi')),
+                      ],
+                    ),
                   ),
                 )
               : RefreshIndicator(

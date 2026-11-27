@@ -1,5 +1,5 @@
-from typing import List
-from datetime import datetime, timezone
+import asyncio
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -13,6 +13,68 @@ from app.providers import get_data_provider
 router = APIRouter()
 
 
+async def _load_live_or_db_candles(
+    db: Session,
+    symbol: str,
+    tf: str,
+    count: int,
+) -> List[Dict[str, Any]]:
+    """
+    Loads candles directly from the fast in-memory-cached LiveDataProvider (Yahoo/TwelveData)
+    concurrently with live spot price (TradingView FOREX.com) and falls back to a single
+    bounded DB query only if the external feed is unavailable. Avoids N+1 per-candle SQL
+    writes inside GET endpoints so remote Neon PostgreSQL never bottlenecks serverless requests.
+    """
+    provider = get_data_provider()
+    raw_res, price_res = await asyncio.gather(
+        asyncio.wait_for(provider.get_price_candles(symbol=symbol, timeframe=tf, count=count), timeout=8.0),
+        asyncio.wait_for(provider.get_latest_price(symbol), timeout=4.0),
+        return_exceptions=True,
+    )
+
+    curr_p = 0.0
+    if isinstance(price_res, dict):
+        try:
+            curr_p = float(price_res.get("current_price") or 0.0)
+        except Exception:
+            curr_p = 0.0
+
+    candles_list: List[Dict[str, Any]] = []
+    if isinstance(raw_res, list) and len(raw_res) >= 15:
+        sorted_raw = sorted(raw_res, key=lambda c: c["timestamp"])
+        candles_list = [dict(c) for c in sorted_raw]
+    else:
+        db_rows = (
+            db.query(PriceCandle)
+            .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
+            .order_by(desc(PriceCandle.timestamp))
+            .limit(count)
+            .all()
+        )
+        candles_list = [
+            {
+                "id": c.id,
+                "symbol": c.symbol,
+                "timeframe": c.timeframe,
+                "timestamp": c.timestamp,
+                "open": float(c.open),
+                "high": float(c.high),
+                "low": float(c.low),
+                "close": float(c.close),
+                "volume": float(c.volume or 0.0),
+            }
+            for c in reversed(db_rows)
+        ]
+
+    if candles_list and curr_p > 500.0:
+        last_c = candles_list[-1]
+        last_c["close"] = curr_p
+        last_c["high"] = max(float(last_c["high"]), curr_p)
+        last_c["low"] = min(float(last_c["low"]), curr_p)
+
+    return candles_list
+
+
 @router.get("/candles/{symbol}", response_model=List[PriceCandleResponse])
 async def get_candlestick_chart_data(
     symbol: str = "XAUUSD",
@@ -23,93 +85,31 @@ async def get_candlestick_chart_data(
     """
     Get OHLCV candlestick records for charting on mobile.
     Sorted chronologically (ascending timestamp).
-    Auto-fetches from live provider if candles are missing or insufficient.
     """
     symbol = symbol.upper()
     tf = timeframe.lower()
 
-    candles = (
-        db.query(PriceCandle)
-        .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
-        .order_by(desc(PriceCandle.timestamp))
-        .limit(limit)
-        .all()
-    )
-
-    # Check if we need fresh live candles from provider
-    need_refresh = False
-    if not candles or len(candles) < 20:
-        need_refresh = True
-    else:
-        # If latest candle is older than 30 minutes, refresh with live feed
-        latest_time = candles[0].timestamp
-        now_utc = datetime.now(timezone.utc)
-        if latest_time.tzinfo is None:
-            latest_time = latest_time.replace(tzinfo=timezone.utc)
-        if (now_utc - latest_time).total_seconds() > 1800:
-            need_refresh = True
-
-    if need_refresh:
-        provider = get_data_provider()
-        raw_candles = await provider.get_price_candles(symbol=symbol, timeframe=tf, count=limit)
-        for c in raw_candles:
-            existing = (
-                db.query(PriceCandle)
-                .filter(
-                    PriceCandle.symbol == symbol,
-                    PriceCandle.timeframe == tf,
-                    PriceCandle.timestamp == c["timestamp"],
-                )
-                .first()
-            )
-            if not existing:
-                db.add(PriceCandle(
-                    symbol=symbol,
-                    timeframe=tf,
-                    timestamp=c["timestamp"],
-                    open=c["open"],
-                    high=c["high"],
-                    low=c["low"],
-                    close=c["close"],
-                    volume=c["volume"],
-                ))
-            else:
-                existing.open = c["open"]
-                existing.close = c["close"]
-                existing.high = max(existing.high, c["high"])
-                existing.low = min(existing.low, c["low"])
-        db.commit()
-
-        candles = (
-            db.query(PriceCandle)
-            .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
-            .order_by(desc(PriceCandle.timestamp))
-            .limit(limit)
-            .all()
-        )
-
-    if not candles:
+    candles_list = await _load_live_or_db_candles(db, symbol, tf, limit)
+    if not candles_list:
         raise HTTPException(
             status_code=404,
-            detail=f"No candlestick data available for symbol '{symbol}' on timeframe '{timeframe}'"
+            detail=f"No candlestick data available for symbol '{symbol}' on timeframe '{timeframe}'",
         )
 
-    # Return sorted ascending by time for charting libraries
-    candles_sorted = sorted(candles, key=lambda c: c.timestamp)
-    if candles_sorted:
-        provider = get_data_provider()
-        try:
-            price_info = await provider.get_latest_price(symbol)
-            curr_p = price_info.get("current_price")
-            if curr_p and curr_p > 500.0:
-                last_c = candles_sorted[-1]
-                last_c.close = curr_p
-                last_c.high = max(last_c.high, curr_p)
-                last_c.low = min(last_c.low, curr_p)
-        except Exception:
-            pass
-
-    return candles_sorted
+    return [
+        PriceCandleResponse(
+            id=int(c.get("id") or (i + 1)),
+            symbol=symbol,
+            timeframe=tf,
+            timestamp=c["timestamp"],
+            open=float(c["open"]),
+            high=float(c["high"]),
+            low=float(c["low"]),
+            close=float(c["close"]),
+            volume=float(c.get("volume") or 0.0),
+        )
+        for i, c in enumerate(candles_list[-limit:])
+    ]
 
 
 @router.get("/live-price/{symbol}")
@@ -119,7 +119,6 @@ async def get_live_price_tick(symbol: str = "XAUUSD"):
     """
     provider = get_data_provider()
     return await provider.get_latest_price(symbol=symbol.upper())
-
 
 
 @router.get("/indicators/{symbol}", response_model=TechnicalIndicatorsResponse)
@@ -138,71 +137,12 @@ async def get_technical_indicators(
     symbol = symbol.upper()
     tf = timeframe.lower()
 
-    candles = (
-        db.query(PriceCandle)
-        .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
-        .order_by(PriceCandle.timestamp.asc())
-        .all()
-    )
-
-    if not candles or len(candles) < 20:
-        provider = get_data_provider()
-        raw_candles = await provider.get_price_candles(symbol=symbol, timeframe=tf, count=80)
-        for c in raw_candles:
-            existing = (
-                db.query(PriceCandle)
-                .filter(
-                    PriceCandle.symbol == symbol,
-                    PriceCandle.timeframe == tf,
-                    PriceCandle.timestamp == c["timestamp"],
-                )
-                .first()
-            )
-            if not existing:
-                db.add(PriceCandle(
-                    symbol=symbol,
-                    timeframe=tf,
-                    timestamp=c["timestamp"],
-                    open=c["open"],
-                    high=c["high"],
-                    low=c["low"],
-                    close=c["close"],
-                    volume=c["volume"],
-                ))
-            else:
-                existing.open = c["open"]
-                existing.close = c["close"]
-                existing.high = max(existing.high, c["high"])
-                existing.low = min(existing.low, c["low"])
-        db.commit()
-
-        candles = (
-            db.query(PriceCandle)
-            .filter(PriceCandle.symbol == symbol, PriceCandle.timeframe == tf)
-            .order_by(PriceCandle.timestamp.asc())
-            .all()
-        )
-
-    if not candles or len(candles) < 20:
+    candles_list = await _load_live_or_db_candles(db, symbol, tf, 220)
+    if not candles_list or len(candles_list) < 20:
         raise HTTPException(
             status_code=400,
-            detail=f"Insufficient candle history for '{symbol}' to calculate technical indicators."
+            detail=f"Insufficient candle history for '{symbol}' to calculate technical indicators.",
         )
-
-    candles_list = [
-        {"open": c.open, "high": c.high, "low": c.low, "close": c.close, "volume": c.volume, "timestamp": c.timestamp}
-        for c in candles
-    ]
-
-    try:
-        price_info = await provider.get_latest_price(symbol)
-        curr_p = price_info.get("current_price")
-        if curr_p and curr_p > 500.0 and candles_list:
-            candles_list[-1]["close"] = curr_p
-            candles_list[-1]["high"] = max(candles_list[-1]["high"], curr_p)
-            candles_list[-1]["low"] = min(candles_list[-1]["low"], curr_p)
-    except Exception:
-        pass
 
     calc_res = TechnicalCalculator.calculate_indicators(candles_list)
 

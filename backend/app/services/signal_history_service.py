@@ -51,6 +51,7 @@ def _norm_candle_ts(raw: Any) -> Optional[datetime]:
 class SignalHistoryService:
     """Tracks, verifies, and summarizes real SL / TP1 / TP2 / TP3 outcomes for XAU/USD setups."""
     _last_eval_ts: Dict[str, float] = {}
+    _legacy_purged_symbols: set = set()
 
     @staticmethod
     def _compute_realized_pips(
@@ -621,6 +622,7 @@ class SignalHistoryService:
 
         import json
         updated = 0
+        dirty = False
         now_utc = datetime.now(timezone.utc)
         last_closed = (
             db.query(TradeSignalHistory)
@@ -651,22 +653,49 @@ class SignalHistoryService:
                 now_utc=now_utc,
                 expire_hours=12.0,
             )
-            sig.outcome = res["outcome"]
-            sig.is_closed = res["is_closed"]
-            sig.triggered_at = res["triggered_at"]
-            sig.closed_at = res["closed_at"]
-            sig.hit_price = res["hit_price"]
-            sig.max_favorable_pips = res["max_favorable_pips"]
-            sig.max_adverse_pips = res["max_adverse_pips"]
-            sig.realized_pips = res["realized_pips"]
-            sig.outcome_note = res["outcome_note"]
-            if sig.is_closed:
-                pm = PostMortemService.evaluate_closed_trade(sig, candles, prev_closed_trade=last_closed)
-                sig.post_mortem_json = json.dumps(pm, ensure_ascii=False)
-                last_closed = sig
-            updated += 1
+            prev_state = (
+                sig.outcome,
+                bool(sig.is_closed),
+                _to_utc(sig.triggered_at),
+                _to_utc(sig.closed_at),
+                sig.hit_price,
+                round(sig.max_favorable_pips or 0.0, 2),
+                round(sig.max_adverse_pips or 0.0, 2),
+                round(sig.realized_pips or 0.0, 2),
+                sig.outcome_note or "",
+            )
+            next_state = (
+                res["outcome"],
+                bool(res["is_closed"]),
+                _to_utc(res["triggered_at"]),
+                _to_utc(res["closed_at"]),
+                res["hit_price"],
+                round(res["max_favorable_pips"] or 0.0, 2),
+                round(res["max_adverse_pips"] or 0.0, 2),
+                round(res["realized_pips"] or 0.0, 2),
+                res["outcome_note"] or "",
+            )
+            if prev_state != next_state or res["is_closed"]:
+                sig.outcome = res["outcome"]
+                sig.is_closed = res["is_closed"]
+                sig.triggered_at = res["triggered_at"]
+                sig.closed_at = res["closed_at"]
+                sig.hit_price = res["hit_price"]
+                sig.max_favorable_pips = res["max_favorable_pips"]
+                sig.max_adverse_pips = res["max_adverse_pips"]
+                sig.realized_pips = res["realized_pips"]
+                sig.outcome_note = res["outcome_note"]
+                if prev_state != next_state:
+                    dirty = True
+                if sig.is_closed:
+                    pm = PostMortemService.evaluate_closed_trade(sig, candles, prev_closed_trade=last_closed)
+                    sig.post_mortem_json = json.dumps(pm, ensure_ascii=False)
+                    last_closed = sig
+                    dirty = True
+                updated += 1
 
-        db.commit()
+        if dirty:
+            db.commit()
         cls._last_eval_ts[sym] = now_ts
         return updated
 
@@ -886,6 +915,7 @@ class SignalHistoryService:
         action_filter: str = "ALL",
         outcome_filter: str = "ALL",
         limit: int = 40,
+        force_eval: bool = False,
     ) -> SignalHistoryResponse:
         sym = symbol.upper()
         provider = get_data_provider()
@@ -895,14 +925,16 @@ class SignalHistoryService:
         except Exception:
             curr_price = 0.0
 
-        # 1. Pure LIVE-only ledger: purge any legacy backtest/replay rows so we start cleanly from scratch
-        legacy_audit = (
-            db.query(TradeSignalHistory)
-            .filter(TradeSignalHistory.symbol == sym, TradeSignalHistory.source_type != "LIVE")
-            .delete(synchronize_session=False)
-        )
-        if legacy_audit:
-            db.commit()
+        # 1. Pure LIVE-only ledger: purge any legacy non-LIVE rows once per worker process
+        if sym not in cls._legacy_purged_symbols:
+            legacy_audit = (
+                db.query(TradeSignalHistory)
+                .filter(TradeSignalHistory.symbol == sym, TradeSignalHistory.source_type != "LIVE")
+                .delete(synchronize_session=False)
+            )
+            if legacy_audit:
+                db.commit()
+            cls._legacy_purged_symbols.add(sym)
 
         # 1b. Keep LIVE ledger synced 1-to-1 with the current locked Dashboard setup
         try:
@@ -919,8 +951,8 @@ class SignalHistoryService:
         except Exception:
             pass
 
-        # 2. Re-evaluate open LIVE signal against latest 15m candles + spot price
-        await cls.evaluate_open_signals(db, sym, curr_price=curr_price, force=True)
+        # 2. Re-evaluate open LIVE signal against latest 15m candles + spot price (45s cache unless force_eval)
+        await cls.evaluate_open_signals(db, sym, curr_price=curr_price, force=force_eval)
 
         # 3. Query ONLY real-time LIVE records (zero backtest/demo data)
         all_rows = (

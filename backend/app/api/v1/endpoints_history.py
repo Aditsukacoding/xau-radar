@@ -26,6 +26,7 @@ async def get_signal_history(
         action_filter=action,
         outcome_filter=outcome,
         limit=limit,
+        force_eval=False,
     )
 
 
@@ -41,6 +42,7 @@ async def refresh_signal_history(
         action_filter="ALL",
         outcome_filter="ALL",
         limit=40,
+        force_eval=True,
     )
 
 

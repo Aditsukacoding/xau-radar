@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -46,29 +47,41 @@ class ApiService {
     baseUrl = newUrl;
   }
 
-  static const Duration _defaultTimeout = Duration(seconds: 28);
+  static const Duration _defaultTimeout = Duration(seconds: 22);
 
-  // 1. Dashboard Summary (with 1 automatic retry for Vercel + Neon serverless cold starts)
-  Future<DashboardSummaryModel> getDashboardSummary({String symbol = 'XAUUSD'}) async {
+  Future<http.Response> _getWithRetry(
+    String url, {
+    Duration timeout = _defaultTimeout,
+    int maxAttempts = 2,
+  }) async {
     Object? lastErr;
-    for (int attempt = 0; attempt < 2; attempt++) {
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        final response = await http
-            .get(Uri.parse('$baseUrl/dashboard/summary/$symbol'))
-            .timeout(_defaultTimeout);
-        if (response.statusCode == 200) {
-          return DashboardSummaryModel.fromJson(json.decode(response.body));
+        final response = await http.get(Uri.parse(url)).timeout(timeout);
+        if (response.statusCode < 500) {
+          return response;
         }
-        lastErr = Exception('Gagal memuat ringkasan dashboard: ${response.statusCode}');
-        if (response.statusCode < 500) break;
+        lastErr = Exception('Server sedang sibuk (${response.statusCode})');
       } catch (e) {
         lastErr = e;
       }
-      if (attempt == 0) {
-        await Future.delayed(const Duration(milliseconds: 800));
+      if (attempt < maxAttempts - 1) {
+        await Future.delayed(const Duration(milliseconds: 700));
       }
     }
-    throw lastErr ?? Exception('Gagal terhubung ke server dashboard');
+    if (lastErr is TimeoutException) {
+      throw Exception('Koneksi ke server melebihi batas waktu. Silakan coba lagi.');
+    }
+    throw lastErr ?? Exception('Gagal terhubung ke server.');
+  }
+
+  // 1. Dashboard Summary (with automatic retry for Vercel + Neon serverless cold starts)
+  Future<DashboardSummaryModel> getDashboardSummary({String symbol = 'XAUUSD'}) async {
+    final response = await _getWithRetry('$baseUrl/dashboard/summary/$symbol');
+    if (response.statusCode == 200) {
+      return DashboardSummaryModel.fromJson(json.decode(response.body));
+    }
+    throw Exception('Gagal memuat ringkasan dashboard: ${response.statusCode}');
   }
 
   // 2. Economic Calendar
@@ -77,7 +90,7 @@ class ApiService {
     if (impact != null && impact.isNotEmpty) {
       url += '&impact=$impact';
     }
-    final response = await http.get(Uri.parse(url)).timeout(_defaultTimeout);
+    final response = await _getWithRetry(url);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => EconomicEventModel.fromJson(e)).toList();
@@ -88,9 +101,7 @@ class ApiService {
 
   // 3. Upcoming High Impact Radar
   Future<List<EconomicEventModel>> getUpcomingHighImpact({int hours = 48}) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/fundamental/upcoming-high-impact?hours_ahead=$hours'))
-        .timeout(_defaultTimeout);
+    final response = await _getWithRetry('$baseUrl/fundamental/upcoming-high-impact?hours_ahead=$hours');
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => EconomicEventModel.fromJson(e)).toList();
@@ -105,7 +116,7 @@ class ApiService {
     if (sentiment != null && sentiment.isNotEmpty) {
       url += '&sentiment=$sentiment';
     }
-    final response = await http.get(Uri.parse(url)).timeout(_defaultTimeout);
+    final response = await _getWithRetry(url);
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => NewsArticleModel.fromJson(e)).toList();
@@ -116,9 +127,7 @@ class ApiService {
 
   // 5. Candlestick Chart Data
   Future<List<PriceCandleModel>> getCandles(String symbol, {String timeframe = '1h', int limit = 80}) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/technical/candles/$symbol?timeframe=$timeframe&limit=$limit'))
-        .timeout(_defaultTimeout);
+    final response = await _getWithRetry('$baseUrl/technical/candles/$symbol?timeframe=$timeframe&limit=$limit');
     if (response.statusCode == 200) {
       final List<dynamic> data = json.decode(response.body);
       return data.map((e) => PriceCandleModel.fromJson(e)).toList();
@@ -129,9 +138,7 @@ class ApiService {
 
   // 6. Technical Indicators
   Future<TechnicalIndicatorsModel> getTechnicalIndicators(String symbol, {String timeframe = '1h'}) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/technical/indicators/$symbol?timeframe=$timeframe'))
-        .timeout(_defaultTimeout);
+    final response = await _getWithRetry('$baseUrl/technical/indicators/$symbol?timeframe=$timeframe');
     if (response.statusCode == 200) {
       return TechnicalIndicatorsModel.fromJson(json.decode(response.body));
     } else {
@@ -141,9 +148,7 @@ class ApiService {
 
   // 7. Latest AI Analysis Report
   Future<AnalysisReportModel> getLatestAnalysis({String symbol = 'XAUUSD'}) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/analysis/latest/$symbol'))
-        .timeout(_defaultTimeout);
+    final response = await _getWithRetry('$baseUrl/analysis/latest/$symbol');
     if (response.statusCode == 200) {
       return AnalysisReportModel.fromJson(json.decode(response.body));
     } else {
@@ -244,7 +249,7 @@ class ApiService {
     }
     final query = params.isNotEmpty ? '?${params.join('&')}' : '';
     final url = '$baseUrl/news-intelligence/latest/$symbol$query';
-    final response = await http.get(Uri.parse(url)).timeout(_defaultTimeout);
+    final response = await _getWithRetry(url);
     if (response.statusCode == 200) {
       return NewsIntelligenceModel.fromJson(json.decode(response.body));
     } else {
@@ -260,7 +265,7 @@ class ApiService {
     int limit = 40,
   }) async {
     final url = '$baseUrl/signals/history/$symbol?action=$action&outcome=$outcome&limit=$limit';
-    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+    final response = await _getWithRetry(url, timeout: const Duration(seconds: 26));
     if (response.statusCode == 200) {
       return SignalHistoryResponseModel.fromJson(json.decode(response.body));
     } else {
